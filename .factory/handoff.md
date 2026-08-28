@@ -1,4 +1,14 @@
-# Tempo Lab v1 handoff
+# Tempo Lab v1 handoff — verification FAIL
+
+## Verification status (2026-08-28)
+
+**FAIL for candidate `cca26b57f1614d15a6f6bd8da5237d9398b2436b` at `https://adaptive-metronome-lab.sociobot.in`.** Fresh installs, core drills, local persistence, exports, accessibility, mobile, privacy, and offline reload pass. However, an already-installed PWA remains served the old cache-first `/assets/app.js` because this candidate changes the app bundle without changing the fixed `tempo-lab-v1` service-worker cache/version or application URLs. The candidate's high-tempo visual-cue fix therefore does not reach existing PWA users. A share/import route can also bypass all mode amount limits (for example, drift `±999 BPM`).
+
+Exact reproduction, hashes, all commands/results, passing evidence, and required retest are in [`.factory/verification.md`](verification.md). No product source was changed by verification.
+
+Required before release: version the service-worker/app cache per release (or content-hash asset URLs) and test a controlled prior client upgrading on the same origin; validate imported/shared amount ranges by mode.
+
+---
 
 Build work order: `adaptive-metronome-lab-build-1`
 
