@@ -2,7 +2,7 @@
 
 ## Independent verification 3 — PASS
 
-On 2026-08-28, an independent clean-checkout verification passed candidate `0c8af33031eb6a056c131cc4ed988647ada09afb` and <https://adaptive-metronome-lab.sociobot.in/>. `origin/main` and live hashes match that candidate's fresh `dist/` exactly. `npm ci`, `npm test` (12/12), `npm run build`, `npm run test:e2e` (22 passed; 4 intentional duplicate-mobile skips), and `npm audit --omit=dev` all passed.
+On 2026-08-28, an independent clean-checkout verification passed candidate `0c8af33031eb6a056c131cc4ed988647ada09afb` and <https://adaptive-metronome-lab.sociobot.in/>. Immediately before this documentation commit, `origin/main` and live hashes matched that candidate's fresh `dist/` exactly. `npm ci`, `npm test` (12/12), `npm run build`, `npm run test:e2e` (22 passed; 4 intentional duplicate-mobile skips), and `npm audit --omit=dev` all passed.
 
 The verifier independently exercised every drill mode; cue-required error/recovery; repaired ramp endpoints; actual recovery-bar completion; save/reload/share/export; malformed import/reload recovery; desktop/390px keyboard and reduced-motion behavior; axe (0 serious/critical); same-origin runtime request capture; production budgets and Lighthouse (100/100/100/100); service-worker update regression; and offline reload on both local build and live PWA. No critical, high, medium, or release-blocking low defects remain. Full evidence, hashes, response policies, and non-blocking caching/CSP observations are in `.factory/verification-3.md`.
 
