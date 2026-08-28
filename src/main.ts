@@ -175,8 +175,8 @@ function onBeat(index: number, plan: ReturnType<typeof import("./drill").getBeat
   dial.dataset.silent = String(!plan.audible);
   if (current.visual) {
     dial.classList.remove("pulse");
-    if (plan.bpm <= 180) requestAnimationFrame(() => dial.classList.add("pulse"));
-    else dial.classList.toggle("fast-beat");
+    if (plan.bpm <= 180) { dial.classList.remove("fast-beat"); requestAnimationFrame(() => dial.classList.add("pulse")); }
+    else dial.classList.add("fast-beat");
   }
   document.querySelector("#live-bpm")!.textContent = String(Math.round(plan.bpm));
   document.querySelector("#beat-count")!.textContent = `Bar ${bar} of ${current.bars} · Beat ${beat} of ${current.meter}`;
