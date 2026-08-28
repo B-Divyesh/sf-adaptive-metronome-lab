@@ -1,6 +1,6 @@
 import "./style.css";
 import { amountDefault, createDrill, modeLabels, type Drill, type DrillMode, type PracticeLog } from "./types";
-import { describeDrill, estimateSeconds, routePoints, validateDrill } from "./drill";
+import { describeDrill, estimateSeconds, minimumBarsForRecovery, rampAmountBounds, routePoints, supportedBarCounts, validateDrill, validatePracticeLog } from "./drill";
 import { Metronome } from "./metronome";
 import { database } from "./storage";
 
@@ -19,6 +19,18 @@ const modeInfo: Record<DrillMode, { short: string; description: string; min: num
   delay: { short: "Meet a late arrival", description: "The final click of every second bar arrives late while the underlying grid stays steady.", min: 20, max: 180, step: 10, unit: "ms late" },
   recovery: { short: "Hold pulse through silence", description: "Two reference bars give way to silent bars, followed by an accented recovery bar.", min: 1, max: 4, step: 1, unit: "silent bars" }
 };
+
+function amountBounds(drill: Drill): { min: number; max: number } {
+  return drill.mode === "ramp" ? rampAmountBounds(drill.bpm) : modeInfo[drill.mode];
+}
+
+function keepControlsCompatible(): void {
+  const bounds = amountBounds(current);
+  current.amount = Math.min(bounds.max, Math.max(bounds.min, current.amount));
+  if (current.mode === "recovery" && current.bars < minimumBarsForRecovery(current.amount)) {
+    current.bars = supportedBarCounts.find((bars) => bars >= minimumBarsForRecovery(current.amount))!;
+  }
+}
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]!);
@@ -62,6 +74,7 @@ function amountText(drill: Drill): string {
 
 function render(): void {
   const info = modeInfo[current.mode];
+  const bounds = amountBounds(current);
   workspace.innerHTML = `
     <section class="practice-grid" id="practice" aria-labelledby="practice-title">
       <div class="editor">
@@ -71,8 +84,8 @@ function render(): void {
         </fieldset>
         <div class="control-grid">
           <label class="field"><span>Starting tempo <output id="bpm-output" for="bpm">${current.bpm} BPM</output></span><input id="bpm" aria-label="Starting tempo" type="range" min="40" max="220" step="1" value="${current.bpm}" /></label>
-          <label class="field"><span>${current.mode === "ramp" ? "Destination change" : modeLabels[current.mode]} <output id="amount-output" for="amount">${amountText(current)}</output></span><input id="amount" type="range" min="${info.min}" max="${info.max}" step="${info.step}" value="${current.amount}" /></label>
-          <label class="compact-field"><span>Length</span><select id="bars">${[4, 8, 12, 16, 24, 32, 48, 64].map((n) => `<option value="${n}" ${current.bars === n ? "selected" : ""}>${n} bars</option>`).join("")}</select></label>
+          <label class="field"><span>${current.mode === "ramp" ? "Destination change" : modeLabels[current.mode]} <output id="amount-output" for="amount">${amountText(current)}</output></span><input id="amount" type="range" min="${bounds.min}" max="${bounds.max}" step="${info.step}" value="${current.amount}" /></label>
+          <label class="compact-field"><span>Length</span><select id="bars">${supportedBarCounts.map((n) => `<option value="${n}" ${current.bars === n ? "selected" : ""} ${current.mode === "recovery" && n < minimumBarsForRecovery(current.amount) ? "disabled" : ""}>${n} bars</option>`).join("")}</select></label>
           <label class="compact-field"><span>Meter</span><select id="meter">${[2, 3, 4, 5, 6, 7].map((n) => `<option value="${n}" ${current.meter === n ? "selected" : ""}>${n}/4</option>`).join("")}</select></label>
         </div>
         <div class="route-card"><div class="route-meta"><span>Route preview</span><strong id="route-duration">About ${duration(estimateSeconds(current))}</strong></div><div id="route-graphic">${routeSvg(current)}</div><p id="mode-description">${info.description}</p></div>
@@ -112,12 +125,21 @@ function renderLogs(): string {
 
 function bindEvents(): void {
   document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((input) => input.addEventListener("change", () => {
-    current.mode = input.value as DrillMode; current.amount = amountDefault(current.mode); current.updatedAt = new Date().toISOString(); render();
+    current.mode = input.value as DrillMode; current.amount = amountDefault(current.mode); keepControlsCompatible(); current.updatedAt = new Date().toISOString(); render();
   }));
   const bpm = document.querySelector<HTMLInputElement>("#bpm")!;
   const amount = document.querySelector<HTMLInputElement>("#amount")!;
-  bpm.addEventListener("input", () => { current.bpm = Number(bpm.value); updatePreview(); });
-  amount.addEventListener("input", () => { current.amount = Number(amount.value); updatePreview(); });
+  bpm.addEventListener("input", () => {
+    current.bpm = Number(bpm.value); keepControlsCompatible();
+    const bounds = amountBounds(current); amount.min = String(bounds.min); amount.max = String(bounds.max); amount.value = String(current.amount);
+    updatePreview();
+  });
+  amount.addEventListener("input", () => {
+    current.amount = Number(amount.value); keepControlsCompatible();
+    const bars = document.querySelector<HTMLSelectElement>("#bars")!;
+    for (const option of bars.options) option.disabled = current.mode === "recovery" && Number(option.value) < minimumBarsForRecovery(current.amount);
+    bars.value = String(current.bars); updatePreview();
+  });
   document.querySelector<HTMLSelectElement>("#bars")!.addEventListener("change", (event) => { current.bars = Number((event.target as HTMLSelectElement).value); updatePreview(); });
   document.querySelector<HTMLSelectElement>("#meter")!.addEventListener("change", (event) => { current.meter = Number((event.target as HTMLSelectElement).value); updatePreview(); });
   for (const key of ["audio", "visual", "haptic"] as const) document.querySelector<HTMLInputElement>(`#${key}`)!.addEventListener("change", (event) => { current[key] = (event.target as HTMLInputElement).checked; });
@@ -278,15 +300,17 @@ function exportJson(): void { download(`tempo-lab-backup-${new Date().toISOStrin
 async function importJson(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return;
   try {
-    const data = JSON.parse(await file.text()) as { drills?: unknown[]; logs?: PracticeLog[] };
+    const data = JSON.parse(await file.text()) as { drills?: unknown[]; logs?: unknown[] };
     if (!Array.isArray(data.drills) || !Array.isArray(data.logs)) throw new Error("Missing backup arrays");
     const candidates = data.drills.map(validateDrill);
     // A backup is an all-or-nothing transfer. Quietly dropping an invalid drill
     // can make a user believe a route was restored when it was not.
     if (candidates.some((item) => item === null)) throw new Error("Invalid drill");
     const drills = candidates as Drill[];
-    const incomingLogs = Array.isArray(data.logs) ? data.logs.filter((log) => log && typeof log.id === "string" && typeof log.startedAt === "string") : [];
-    if (incomingLogs.length !== data.logs.length || (!drills.length && !incomingLogs.length)) throw new Error("Invalid logs or empty backup");
+    const checkedLogs = data.logs.map(validatePracticeLog);
+    if (checkedLogs.some((item) => item === null)) throw new Error("Invalid logs");
+    const incomingLogs = checkedLogs as PracticeLog[];
+    if (!drills.length && !incomingLogs.length) throw new Error("Empty backup");
     await database.importData(drills, incomingLogs); saved = await database.getDrills(); logs = await database.getLogs(); render(); showToast(`Imported ${drills.length} drill${drills.length === 1 ? "" : "s"} and ${incomingLogs.length} log entr${incomingLogs.length === 1 ? "y" : "ies"}.`);
   } catch { showToast("That file is not a valid Tempo Lab JSON backup.", "error"); }
   input.value = "";
@@ -318,18 +342,24 @@ window.addEventListener("keydown", (event) => {
 
 async function init(): Promise<void> {
   updateNetwork(); registerServiceWorker(); const shared = loadShared();
+  let recoveredRecords = 0;
   try {
     const [storedDrills, storedLogs] = await Promise.all([database.getDrills(), database.getLogs()]);
     const checkedDrills = storedDrills.map((drill) => ({ original: drill, valid: validateDrill(drill) }));
     const invalidIds = checkedDrills.filter(({ valid }) => !valid).map(({ original }) => original.id);
+    const checkedLogs = storedLogs.map((log) => ({ original: log, valid: validatePracticeLog(log) }));
+    const invalidLogIds = checkedLogs.filter(({ valid }) => !valid).map(({ original }) => original.id);
     // Values written by an earlier version or a malformed import must never
     // re-enter the controls outside their advertised practice-safe ranges.
-    if (invalidIds.length) await Promise.all(invalidIds.map((id) => database.deleteDrill(id)));
+    await database.removeInvalidData(invalidIds, invalidLogIds);
     saved = checkedDrills.flatMap(({ valid }) => valid ? [valid] : []);
-    logs = storedLogs;
+    logs = checkedLogs.flatMap(({ valid }) => valid ? [valid] : []);
+    recoveredRecords = invalidIds.length + invalidLogIds.length;
   }
   catch { showToast("Local storage is unavailable. You can practice, but saves and logs will not persist.", "error"); }
-  render(); if (shared) { const note = document.querySelector<HTMLElement>("#share-note"); if (note) note.hidden = false; }
+  render();
+  if (recoveredRecords) showToast(`Removed ${recoveredRecords} unreadable local record${recoveredRecords === 1 ? "" : "s"} so the practice room could open.`, "error");
+  if (shared) { const note = document.querySelector<HTMLElement>("#share-note"); if (note) note.hidden = false; }
 }
 
 void init();

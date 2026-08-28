@@ -23,6 +23,16 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
+function completeTransaction(db: IDBDatabase, transaction: IDBTransaction, write: () => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => { db.close(); resolve(); };
+    transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error("IndexedDB transaction aborted")); };
+    transaction.onerror = () => { /* The abort handler reports the transaction failure. */ };
+    try { write(); }
+    catch (error) { transaction.abort(); reject(error); }
+  });
+}
+
 async function store(mode: IDBTransactionMode, name: "drills" | "logs"): Promise<IDBObjectStore> {
   const db = await openDatabase();
   const transaction = db.transaction(name, mode);
@@ -38,7 +48,24 @@ export const database = {
   async deleteDrill(id: string): Promise<void> { await requestResult((await store("readwrite", "drills")).delete(id)); },
   async deleteLog(id: string): Promise<void> { await requestResult((await store("readwrite", "logs")).delete(id)); },
   async importData(drills: Drill[], logs: PracticeLog[]): Promise<void> {
-    for (const drill of drills) await this.saveDrill(drill);
-    for (const log of logs) await this.saveLog(log);
+    const db = await openDatabase();
+    const transaction = db.transaction(["drills", "logs"], "readwrite");
+    await completeTransaction(db, transaction, () => {
+      const drillStore = transaction.objectStore("drills");
+      const logStore = transaction.objectStore("logs");
+      drills.forEach((drill) => drillStore.put(drill));
+      logs.forEach((log) => logStore.put(log));
+    });
+  },
+  async removeInvalidData(drillIds: string[], logIds: string[]): Promise<void> {
+    if (!drillIds.length && !logIds.length) return;
+    const db = await openDatabase();
+    const transaction = db.transaction(["drills", "logs"], "readwrite");
+    await completeTransaction(db, transaction, () => {
+      const drillStore = transaction.objectStore("drills");
+      const logStore = transaction.objectStore("logs");
+      drillIds.forEach((id) => drillStore.delete(id));
+      logIds.forEach((id) => logStore.delete(id));
+    });
   }
 };

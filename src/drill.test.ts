@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDrill } from "./types";
-import { estimateSeconds, getBeatPlan, routePoints, validateDrill } from "./drill";
+import { estimateSeconds, getBeatPlan, rampAmountBounds, routePoints, supportedBarCounts, validateDrill, validatePracticeLog } from "./drill";
 
 describe("deterministic drill planning", () => {
   it("replays bounded drift from the same seed", () => {
@@ -17,6 +17,19 @@ describe("deterministic drill planning", () => {
     expect(getBeatPlan(drill, 15).bpm).toBe(104);
   });
 
+  it("keeps every accepted ramp destination inside the 40–220 BPM domain", () => {
+    for (let bpm = 40; bpm <= 220; bpm += 1) {
+      const bounds = rampAmountBounds(bpm);
+      expect(bpm + bounds.min).toBeGreaterThanOrEqual(40);
+      expect(bpm + bounds.max).toBeLessThanOrEqual(220);
+      for (let amount = -40; amount <= 60; amount += 1) {
+        const candidate = validateDrill({ id: "ramp", mode: "ramp", bpm, bars: 16, meter: 4, amount, seed: 1 });
+        expect(Boolean(candidate)).toBe(bpm + amount >= 40 && bpm + amount <= 220);
+        if (candidate) expect(Number.isFinite(estimateSeconds(candidate))).toBe(true);
+      }
+    }
+  });
+
   it("delays only the final beat of every second bar", () => {
     const drill = { ...createDrill(), mode: "delay" as const, meter: 4, amount: 90 };
     expect(getBeatPlan(drill, 6).offsetMs).toBe(0);
@@ -31,6 +44,18 @@ describe("deterministic drill planning", () => {
     expect(getBeatPlan(drill, 12).audible).toBe(false);
     expect(getBeatPlan(drill, 16).audible).toBe(true);
     expect(getBeatPlan(drill, 16).phase).toBe("Recovery bar");
+  });
+
+  it("includes a recovery bar in every accepted amount and length combination", () => {
+    for (let amount = 1; amount <= 4; amount += 1) {
+      for (const bars of supportedBarCounts) {
+        const candidate = validateDrill({ id: "recovery", mode: "recovery", bpm: 120, bars, meter: 4, amount, seed: 1 });
+        expect(Boolean(candidate)).toBe(bars >= amount + 3);
+        if (!candidate) continue;
+        const phases = Array.from({ length: bars }, (_, bar) => getBeatPlan(candidate, bar * candidate.meter).phase);
+        expect(phases).toContain("Recovery bar");
+      }
+    }
   });
 
   it("estimates a finite session duration", () => {
@@ -69,5 +94,35 @@ describe("deterministic drill planning", () => {
     expect(validateDrill({ ...base, bars: 10 })).toBeNull();
     expect(validateDrill({ ...base, meter: 3.5 })).toBeNull();
     expect(validateDrill({ ...base, seed: 0 })).toBeNull();
+  });
+
+  it("validates every practice-log field and its ISO date", () => {
+    const valid = {
+      id: "log-1", drillName: "Bridge", mode: "drift", startedAt: "2026-08-28T05:00:00.000Z",
+      seconds: 30, barsPlanned: 16, barsReached: 8, bpm: 120, amount: 6, completed: false
+    };
+    expect(validatePracticeLog(valid)).toEqual(valid);
+    for (const field of Object.keys(valid) as (keyof typeof valid)[]) {
+      const missing: Partial<typeof valid> = { ...valid };
+      delete missing[field];
+      expect(validatePracticeLog(missing), `missing ${field}`).toBeNull();
+    }
+    for (const invalid of [
+      { id: "" }, { drillName: "" }, { mode: "unknown" }, { startedAt: "not-a-date" },
+      { seconds: -1 }, { seconds: 1.5 }, { barsPlanned: 5 }, { barsReached: 17 },
+      { bpm: 221 }, { amount: 999 }, { completed: "false" }
+    ]) expect(validatePracticeLog({ ...valid, ...invalid })).toBeNull();
+    expect(validatePracticeLog({ id: "bad-log", startedAt: "not-a-date" })).toBeNull();
+  });
+
+  it("applies cross-field drill rules to imported practice logs", () => {
+    const base = {
+      id: "log-1", drillName: "Route", startedAt: "2026-08-28T05:00:00.000Z",
+      seconds: 30, barsPlanned: 16, barsReached: 8, bpm: 120, amount: 6, completed: true
+    };
+    expect(validatePracticeLog({ ...base, mode: "ramp", bpm: 40, amount: -1 })).toBeNull();
+    expect(validatePracticeLog({ ...base, mode: "ramp", bpm: 40, amount: 0 })).not.toBeNull();
+    expect(validatePracticeLog({ ...base, mode: "recovery", barsPlanned: 4, barsReached: 4, amount: 4 })).toBeNull();
+    expect(validatePracticeLog({ ...base, mode: "recovery", barsPlanned: 8, amount: 4 })).not.toBeNull();
   });
 });

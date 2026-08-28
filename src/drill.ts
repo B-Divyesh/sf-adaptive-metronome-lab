@@ -1,6 +1,7 @@
-import type { BeatPlan, Drill } from "./types";
+import type { BeatPlan, Drill, PracticeLog } from "./types";
 
-const supportedBars = new Set([4, 8, 12, 16, 24, 32, 48, 64]);
+export const supportedBarCounts = [4, 8, 12, 16, 24, 32, 48, 64] as const;
+const supportedBars = new Set<number>(supportedBarCounts);
 
 function isIntegerInRange(value: unknown, min: number, max: number): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
@@ -11,6 +12,28 @@ function hasSupportedAmount(mode: Drill["mode"], amount: unknown): amount is num
   if (mode === "ramp") return isIntegerInRange(amount, -40, 60);
   if (mode === "delay") return isIntegerInRange(amount, 20, 180) && amount % 10 === 0;
   return isIntegerInRange(amount, 1, 4);
+}
+
+export function rampAmountBounds(bpm: number): { min: number; max: number } {
+  return { min: Math.max(-40, 40 - bpm), max: Math.min(60, 220 - bpm) };
+}
+
+export function minimumBarsForRecovery(silentBars: number): number {
+  return silentBars + 3;
+}
+
+function hasValidModeRelationship(mode: Drill["mode"], bpm: number, bars: number, amount: number): boolean {
+  if (mode === "ramp") {
+    const bounds = rampAmountBounds(bpm);
+    return amount >= bounds.min && amount <= bounds.max;
+  }
+  return mode !== "recovery" || bars >= minimumBarsForRecovery(amount);
+}
+
+function isIsoDate(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value;
 }
 
 function randomAt(seed: number, position: number): number {
@@ -76,7 +99,18 @@ export function validateDrill(value: unknown): Drill | null {
   const { bpm, bars, meter, seed, amount } = d;
   if (!["drift", "ramp", "delay", "recovery"].includes(d.mode ?? "") || !isIntegerInRange(bpm, 40, 220) || !supportedBars.has(bars ?? 0) || !isIntegerInRange(meter, 2, 7) || !isIntegerInRange(seed, 1, 999_999)) return null;
   const mode = d.mode as Drill["mode"];
-  if (!hasSupportedAmount(mode, amount)) return null;
+  if (!hasSupportedAmount(mode, amount) || !hasValidModeRelationship(mode, bpm, bars!, amount)) return null;
   const now = new Date().toISOString();
   return { id: typeof d.id === "string" ? d.id : crypto.randomUUID(), name: typeof d.name === "string" ? d.name.slice(0, 60) : "Shared drill", mode, bpm, bars: bars!, meter, amount, seed, audio: d.audio !== false, visual: d.visual !== false, haptic: d.haptic === true, createdAt: typeof d.createdAt === "string" ? d.createdAt : now, updatedAt: now };
+}
+
+export function validatePracticeLog(value: unknown): PracticeLog | null {
+  if (!value || typeof value !== "object") return null;
+  const log = value as Partial<PracticeLog>;
+  if (typeof log.id !== "string" || !log.id || log.id.length > 128 || typeof log.drillName !== "string" || !log.drillName.trim() || log.drillName.length > 60) return null;
+  if (!log.mode || !["drift", "ramp", "delay", "recovery"].includes(log.mode) || !isIsoDate(log.startedAt)) return null;
+  if (!Number.isSafeInteger(log.seconds) || log.seconds! < 0 || !supportedBars.has(log.barsPlanned ?? 0) || !isIntegerInRange(log.barsReached, 0, log.barsPlanned ?? -1)) return null;
+  if (!isIntegerInRange(log.bpm, 40, 220) || !hasSupportedAmount(log.mode, log.amount) || !hasValidModeRelationship(log.mode, log.bpm, log.barsPlanned!, log.amount)) return null;
+  if (typeof log.completed !== "boolean") return null;
+  return log as PracticeLog;
 }

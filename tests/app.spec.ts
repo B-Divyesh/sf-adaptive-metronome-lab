@@ -6,6 +6,24 @@ function sharedRoute(payload: object): string {
   return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }
 
+async function readLocalData(page: import("@playwright/test").Page): Promise<{ drills: unknown[]; logs: unknown[] }> {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("tempo-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const read = (name: "drills" | "logs") => new Promise<unknown[]>((resolve, reject) => {
+      const request = db.transaction(name, "readonly").objectStore(name).getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const [drills, logs] = await Promise.all([read("drills"), read("logs")]);
+    db.close();
+    return { drills, logs };
+  });
+}
+
 test("builds, saves, and reloads a named drill", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "Tempo Lab" })).toBeVisible();
@@ -76,6 +94,113 @@ test("rejects out-of-range shared and imported drill settings", async ({ page })
   });
   await expect(page.getByText("That file is not a valid Tempo Lab JSON backup.")).toBeVisible();
   await expect(page.getByRole("heading", { level: 3, name: "Should not import" })).toHaveCount(0);
+});
+
+test("rejects malformed logs atomically and remains usable after reload", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Drill name").fill("Existing route");
+  await page.getByRole("button", { name: "Save drill" }).click();
+  await page.getByRole("button", { name: /Start drill/ }).click();
+  await page.getByRole("button", { name: /Stop drill/ }).click();
+  const before = await readLocalData(page);
+  expect(before.drills).toHaveLength(1);
+  expect(before.logs).toHaveLength(1);
+
+  await page.locator("#import-json").setInputFiles({
+    name: "malformed-log.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({
+      drills: [{ id: "must-not-import", name: "Must not import", mode: "drift", bpm: 120, bars: 16, meter: 4, amount: 6, seed: 1 }],
+      logs: [{ id: "bad-log", startedAt: "not-a-date" }]
+    }))
+  });
+  await expect(page.getByText("That file is not a valid Tempo Lab JSON backup.")).toBeVisible();
+  expect(await readLocalData(page)).toEqual(before);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Build your drill" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Existing route" })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Bounded drift/ })).toBeVisible();
+});
+
+test("quarantines a malformed legacy log without discarding valid local data", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("tempo-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction("logs", "readwrite");
+      const store = transaction.objectStore("logs");
+      store.put({ id: "valid-log", drillName: "Kept route", mode: "drift", startedAt: "2026-08-28T05:00:00.000Z", seconds: 10, barsPlanned: 16, barsReached: 2, bpm: 92, amount: 6, completed: false });
+      store.put({ id: "bad-log", startedAt: "not-a-date" });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Build your drill" })).toBeVisible();
+  await expect(page.getByText("Removed 1 unreadable local record so the practice room could open.")).toBeVisible();
+  const data = await readLocalData(page);
+  expect(data.logs).toHaveLength(1);
+  expect(data.logs[0]).toMatchObject({ id: "valid-log", drillName: "Kept route" });
+});
+
+test("constrains ramp controls and shared routes to finite supported destinations", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("radio", { name: /Tempo ramp/ }).check();
+  await page.locator("#bpm").fill("40");
+  await expect(page.locator("#amount")).toHaveAttribute("min", "0");
+  await page.locator("#amount").fill("0");
+  await expect(page.locator("#amount-output")).toHaveText("+0 → 40 BPM");
+  await expect(page.locator("#route-duration")).not.toContainText("Infinity");
+  await page.locator("#bpm").fill("220");
+  await expect(page.locator("#amount")).toHaveAttribute("max", "0");
+  await expect(page.locator("#route-duration")).not.toContainText("NaN");
+
+  const unsafe = { n: "Zero destination", m: "ramp", b: 40, l: 16, t: 4, a: -40, s: 1 };
+  await page.goto(`/?route=${sharedRoute(unsafe)}`);
+  await expect(page.getByText("That share link is incomplete or invalid. A fresh drill was opened instead.")).toBeVisible();
+});
+
+test("expands a recovery route to include the advertised recovery bar", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("radio", { name: /Recovery gap/ }).check();
+  await page.locator("#bars").selectOption("4");
+  await page.locator("#amount").fill("1");
+  await expect(page.locator("#bars")).toHaveValue("4");
+  await page.locator("#amount").fill("4");
+  await expect(page.locator("#bars")).toHaveValue("8");
+  await expect(page.locator('#bars option[value="4"]')).toHaveAttribute("disabled", "");
+  await page.locator("#bpm").fill("220");
+  await page.locator("#meter").selectOption("2");
+  await page.locator("#audio").uncheck();
+  await page.evaluate(() => {
+    const phase = document.querySelector("#phase")!;
+    const seen: string[] = [];
+    (globalThis as typeof globalThis & { __tempoLabPhases?: string[] }).__tempoLabPhases = seen;
+    new MutationObserver(() => seen.push(phase.textContent ?? "")).observe(phase, { childList: true, subtree: true, characterData: true });
+  });
+  await page.getByRole("button", { name: /Start drill/ }).click();
+  await expect(page.getByText("Route complete. Practice logged.")).toBeVisible({ timeout: 8_000 });
+  expect(await page.evaluate(() => (globalThis as typeof globalThis & { __tempoLabPhases?: string[] }).__tempoLabPhases)).toContain("Recovery bar");
+});
+
+test("keeps auxiliary mobile links at least 44 by 44 CSS pixels", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "touch target regression is specific to the 390px layout");
+  await page.goto("/");
+  for (const target of [
+    page.locator(".wordmark"), page.getByRole("link", { name: "Log", exact: true }),
+    page.getByRole("link", { name: "Build the first route" }), page.getByRole("link", { name: "Privacy" }),
+    page.getByRole("link", { name: "Terms" })
+  ]) {
+    const box = await target.boundingBox();
+    expect(box?.width).toBeGreaterThanOrEqual(44);
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+  }
 });
 
 test("removes invalid legacy drill records before they reach the controls", async ({ page }) => {
