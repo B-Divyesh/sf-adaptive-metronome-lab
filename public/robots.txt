@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://adaptive-metronome-lab.sociobot.in/sitemap.xml

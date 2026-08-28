@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Tempo Lab metronome route mark">
+  <rect width="512" height="512" fill="#10243a"/>
+  <path d="M96 416 203 82h106l107 334h-69l-24-78H189l-24 78H96Zm111-137h98l-49-159-49 159Z" fill="#f4be4f"/>
+  <path d="M76 374h104l74-82 80 43h102" fill="none" stroke="#fff3d0" stroke-width="24"/>
+  <g fill="#ef6b57" stroke="#10243a" stroke-width="10"><circle cx="76" cy="374" r="24"/><circle cx="180" cy="374" r="24"/><circle cx="254" cy="292" r="24"/><circle cx="334" cy="335" r="24"/><circle cx="436" cy="335" r="24"/></g>
+</svg>
