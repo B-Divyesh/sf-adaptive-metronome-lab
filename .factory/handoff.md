@@ -54,6 +54,14 @@ npm run preview
 
 After deployment, verify the live identity at `https://adaptive-metronome-lab.sociobot.in` with the same basic browser/accessibility check and compare the live app, worker, manifest, and key asset hashes to `dist/`.
 
+## Deployment evidence
+
+Deployed as a static Azure Static Web App with `/opt/fleet/lib/deploy-static.sh adaptive-metronome-lab dist` on 2026-08-28. Azure deployment ID: `3f3869b3-ff9f-4128-9ba3-d7b6261df7ac`; production HTTPS returned 200.
+
+Post-deploy `/opt/fleet/lib/verify-url.sh` against `https://adaptive-metronome-lab.sociobot.in/` returned HTTP 200 in **587 ms**, with no browser console/page errors, title/lang/main/one-H1 present, and 0 missing image alts or unlabeled buttons. SHA-256 comparisons of live versus `dist/` matched for `index.html`, `assets/app.js`, `assets/app.css`, `sw.js`, and `manifest.webmanifest`.
+
+A fresh live Chromium mobile-sized session registered and controlled the worker, then reloaded offline with `Offline · practice available` and the practice controls visible. Recorded requests were same-origin only and there were no console errors. Live headers include HSTS, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and the microphone/camera/geolocation `Permissions-Policy`.
+
 ## Privacy and known constraints
 
 There are no analytics, accounts, third-party scripts/fonts, microphone access, payments, or runtime API calls. Saved drills and logs are local IndexedDB data; users control them through CSV/JSON export and JSON import. Share links contain settings only.
