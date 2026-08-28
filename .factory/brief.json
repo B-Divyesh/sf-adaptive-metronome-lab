@@ -1,0 +1,11 @@
+{
+  "slug": "adaptive-metronome-lab",
+  "title": "Tempo Lab",
+  "territory": "games-creative",
+  "user": "Musicians practicing timing and expressive playback who need controlled tempo variation and repeatable drills rather than a fixed click or destructive notation hacks.",
+  "smallest_useful_product": "Offline web metronome with bounded random drift, ramp, delayed-beat, and recovery drills; save/share a tiny session preset and export a practice log.",
+  "success_measure": "At least 50% of weekly active beta users save and replay three or more named drills within 30 days.",
+  "artifact_class": "pwa-offline",
+  "monetization": "free",
+  "constraints": "Keep audio timing deterministic and functional offline; avoid medical/performance claims; provide accessible visual/haptic alternatives."
+}

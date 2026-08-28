@@ -1,0 +1,10 @@
+{
+  "asset": "tempo-line-hero.png",
+  "date": "2026-08-28",
+  "generator": "/opt/fleet/lib/gen-image.sh",
+  "deployment": "factory-image",
+  "size": "1536x1024",
+  "quality": "high",
+  "prompt": "Use case: stylized-concept. Asset type: wide website hero illustration. Create an original art-deco transit poster for a precision tempo practice tool: an abstract brass metronome pendulum becomes a railway route crossing a midnight-indigo map, with four simple geometric station markers, concentric timing arcs, warm cream paper cutouts, signal-coral and oxidized-mint accents. Flat screen-print illustration, slightly misregistered mineral inks, crisp rays and strong diagonal movement, sophisticated 1930s travel-poster energy without copying any artist. Wide composition, focal pendulum left of center, quiet darker area on the right for interface overlap. No people, no brands, no typography, no numbers, no logos, no watermark, no gradients, no UI screenshot, no fake text, no copyrighted characters.",
+  "review": "Accepted: clean geometry, four route stations, no text, brands, watermarks, unintended symbols, or visible seams. Palette matches the project tokens."
+}
