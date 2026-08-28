@@ -1,4 +1,4 @@
-# Tempo Lab repair 3 handoff — local release gates passed
+# Tempo Lab repair 3 handoff — release ready
 
 ## Repair scope
 
@@ -68,8 +68,35 @@ npm run preview
 /opt/fleet/lib/deploy-static.sh adaptive-metronome-lab dist
 ```
 
-`dist/` is the static deploy root. Post-deployment live identity, response policies, accessibility, privacy, and offline behavior must byte-match and be recorded below.
+`dist/` is the static deploy root. Package/consumer testing is not applicable to this static end-user PWA.
+
+## Deployment and live evidence
+
+Repair commit `7722abb8ebe8675ed65be93c280ba4ef0ee819ac` was pushed to `origin/main` and deployed with the work order's static helper on 2026-08-28:
+
+```sh
+/opt/fleet/lib/deploy-static.sh adaptive-metronome-lab dist
+```
+
+- Azure Static Web Apps deployment ID: `f358e4d9-59fe-429c-a3ec-f6fbaf3384ba`; custom HTTPS URL returned 200.
+- `/opt/fleet/lib/verify-url.sh https://adaptive-metronome-lab.sociobot.in/ ...`: HTTP 200 in **888 ms**, no console/page errors, title/lang/main/one-H1 present, 0 missing image alts, and 0 unlabeled buttons.
+- Live Playwright axe WCAG 2 A/AA: **0 serious or critical violations** at 390×844; horizontal overflow is 0px.
+- A fresh live client registered and was controlled by `/sw.js`, opened cache `tempo-lab-8a79f76c126e377e`, and reloaded the full practice room offline with `Offline · practice available`.
+- The verifier's malformed-log payload was exercised live: the invalid-file recovery appeared, `bad-log` was absent from IndexedDB, and reload reopened the practice room.
+- Captured live runtime requests were same-origin only, with zero console/page errors.
+- Live responses include HSTS, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Permissions-Policy: camera=(), geolocation=(), microphone=()`. The manifest MIME is `application/manifest+json`; the worker is `Cache-Control: no-cache, no-store, must-revalidate`.
+- Live bytes exactly match `dist/` for all seven identity files:
+
+| Path | SHA-256 |
+| --- | --- |
+| `/` / `index.html` | `bcfc6b6fa677c3ba48f28f8be2708fe144e51bf642050d5b69959d6538c246cc` |
+| `/assets/app.js` | `8fc8c000a767340ae7a0c66e24cdf6ace97d0405ec94437d0fdfdd56ceadb656` |
+| `/assets/app.css` | `8e78fb0b18f1236d688738527d99c1a6149c99b296946c10f627a511ba8a2861` |
+| `/sw.js` | `c051a0c4b5254a0bc2bb7a4b77f74a838ffcd90b048c2820a704a864c2b6081b` |
+| `/manifest.webmanifest` | `a5075f1dc72e99e1ac9423dc93a867db126cd75c16121f0f32a4b9dc01b163ee` |
+| `/privacy/` | `138f2eb996b1df63c93c44a6fe11a6919b161f91b853206a9f19a1dc1b81ac4e` |
+| `/terms/` | `eebe5d1e0d58dc4cd68a43f6ce5ca6bbd6f005561d6c03147a7c73b8749677cd` |
 
 ## Known constraints
 
-No release blockers remain locally. Vibration depends on browser/device support. Web Audio cannot remove output-device or Bluetooth latency. Clearing site data removes local data, so JSON backup remains the user-controlled recovery path. Cloud sync and listening/assessment are intentionally outside the researched scope.
+No known release blockers remain. The static host does not currently send a Content Security Policy; frame denial, permissions policy, referrer policy, HSTS, and MIME protections are present. Vibration depends on browser/device support. Web Audio cannot remove output-device or Bluetooth latency. Clearing site data removes local data, so JSON backup remains the user-controlled recovery path. Cloud sync and listening/assessment are intentionally outside the researched scope.
