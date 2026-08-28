@@ -1,5 +1,18 @@
 import type { BeatPlan, Drill } from "./types";
 
+const supportedBars = new Set([4, 8, 12, 16, 24, 32, 48, 64]);
+
+function isIntegerInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+}
+
+function hasSupportedAmount(mode: Drill["mode"], amount: unknown): amount is number {
+  if (mode === "drift") return isIntegerInRange(amount, 1, 20);
+  if (mode === "ramp") return isIntegerInRange(amount, -40, 60);
+  if (mode === "delay") return isIntegerInRange(amount, 20, 180) && amount % 10 === 0;
+  return isIntegerInRange(amount, 1, 4);
+}
+
 function randomAt(seed: number, position: number): number {
   let value = (seed + Math.imul(position + 1, 0x9e3779b1)) | 0;
   value ^= value >>> 16;
@@ -60,7 +73,10 @@ export function routePoints(drill: Drill, count = 25): number[] {
 export function validateDrill(value: unknown): Drill | null {
   if (!value || typeof value !== "object") return null;
   const d = value as Partial<Drill>;
-  if (!["drift", "ramp", "delay", "recovery"].includes(d.mode ?? "") || typeof d.bpm !== "number" || d.bpm < 30 || d.bpm > 240 || typeof d.bars !== "number" || d.bars < 2 || d.bars > 128 || typeof d.meter !== "number" || d.meter < 2 || d.meter > 7 || typeof d.amount !== "number" || typeof d.seed !== "number") return null;
+  const { bpm, bars, meter, seed, amount } = d;
+  if (!["drift", "ramp", "delay", "recovery"].includes(d.mode ?? "") || !isIntegerInRange(bpm, 40, 220) || !supportedBars.has(bars ?? 0) || !isIntegerInRange(meter, 2, 7) || !isIntegerInRange(seed, 1, 999_999)) return null;
+  const mode = d.mode as Drill["mode"];
+  if (!hasSupportedAmount(mode, amount)) return null;
   const now = new Date().toISOString();
-  return { id: typeof d.id === "string" ? d.id : crypto.randomUUID(), name: typeof d.name === "string" ? d.name.slice(0, 60) : "Shared drill", mode: d.mode!, bpm: Math.round(d.bpm), bars: Math.round(d.bars), meter: Math.round(d.meter), amount: d.amount, seed: Math.round(d.seed), audio: d.audio !== false, visual: d.visual !== false, haptic: d.haptic === true, createdAt: typeof d.createdAt === "string" ? d.createdAt : now, updatedAt: now };
+  return { id: typeof d.id === "string" ? d.id : crypto.randomUUID(), name: typeof d.name === "string" ? d.name.slice(0, 60) : "Shared drill", mode, bpm, bars: bars!, meter, amount, seed, audio: d.audio !== false, visual: d.visual !== false, haptic: d.haptic === true, createdAt: typeof d.createdAt === "string" ? d.createdAt : now, updatedAt: now };
 }

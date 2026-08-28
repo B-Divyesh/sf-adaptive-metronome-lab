@@ -1,4 +1,5 @@
-const VERSION = "tempo-lab-v1";
+// Replaced by Vite at production build time with a digest of this exact shell.
+const VERSION = "__TEMPO_LAB_CACHE_VERSION__";
 const SHELL = [
   "/", "/index.html", "/offline.html", "/privacy/", "/terms/", "/robots.txt", "/sitemap.xml",
   "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png",
