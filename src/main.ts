@@ -279,9 +279,14 @@ async function importJson(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement; const file = input.files?.[0]; if (!file) return;
   try {
     const data = JSON.parse(await file.text()) as { drills?: unknown[]; logs?: PracticeLog[] };
-    const drills = (data.drills ?? []).map(validateDrill).filter((item): item is Drill => item !== null);
+    if (!Array.isArray(data.drills) || !Array.isArray(data.logs)) throw new Error("Missing backup arrays");
+    const candidates = data.drills.map(validateDrill);
+    // A backup is an all-or-nothing transfer. Quietly dropping an invalid drill
+    // can make a user believe a route was restored when it was not.
+    if (candidates.some((item) => item === null)) throw new Error("Invalid drill");
+    const drills = candidates as Drill[];
     const incomingLogs = Array.isArray(data.logs) ? data.logs.filter((log) => log && typeof log.id === "string" && typeof log.startedAt === "string") : [];
-    if (!drills.length && !incomingLogs.length) throw new Error("No data");
+    if (incomingLogs.length !== data.logs.length || (!drills.length && !incomingLogs.length)) throw new Error("Invalid logs or empty backup");
     await database.importData(drills, incomingLogs); saved = await database.getDrills(); logs = await database.getLogs(); render(); showToast(`Imported ${drills.length} drill${drills.length === 1 ? "" : "s"} and ${incomingLogs.length} log entr${incomingLogs.length === 1 ? "y" : "ies"}.`);
   } catch { showToast("That file is not a valid Tempo Lab JSON backup.", "error"); }
   input.value = "";
@@ -313,7 +318,16 @@ window.addEventListener("keydown", (event) => {
 
 async function init(): Promise<void> {
   updateNetwork(); registerServiceWorker(); const shared = loadShared();
-  try { [saved, logs] = await Promise.all([database.getDrills(), database.getLogs()]); }
+  try {
+    const [storedDrills, storedLogs] = await Promise.all([database.getDrills(), database.getLogs()]);
+    const checkedDrills = storedDrills.map((drill) => ({ original: drill, valid: validateDrill(drill) }));
+    const invalidIds = checkedDrills.filter(({ valid }) => !valid).map(({ original }) => original.id);
+    // Values written by an earlier version or a malformed import must never
+    // re-enter the controls outside their advertised practice-safe ranges.
+    if (invalidIds.length) await Promise.all(invalidIds.map((id) => database.deleteDrill(id)));
+    saved = checkedDrills.flatMap(({ valid }) => valid ? [valid] : []);
+    logs = storedLogs;
+  }
   catch { showToast("Local storage is unavailable. You can practice, but saves and logs will not persist.", "error"); }
   render(); if (shared) { const note = document.querySelector<HTMLElement>("#share-note"); if (note) note.hidden = false; }
 }

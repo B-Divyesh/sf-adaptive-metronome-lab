@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Route } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 function sharedRoute(payload: object): string {
@@ -66,9 +66,50 @@ test("rejects out-of-range shared and imported drill settings", async ({ page })
   await page.locator("#import-json").setInputFiles({
     name: "unsafe-tempo-lab-backup.json",
     mimeType: "application/json",
-    buffer: Buffer.from(JSON.stringify({ drills: [unsafe], logs: [] }))
+    buffer: Buffer.from(JSON.stringify({
+      drills: [
+        { id: "valid", name: "Should not import", mode: "drift", bpm: 120, bars: 16, meter: 4, amount: 6, seed: 1 },
+        { id: "unsafe", name: "Unsafe", mode: "drift", bpm: 120, bars: 16, meter: 4, amount: 999, seed: 1 }
+      ],
+      logs: []
+    }))
   });
   await expect(page.getByText("That file is not a valid Tempo Lab JSON backup.")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Should not import" })).toHaveCount(0);
+});
+
+test("removes invalid legacy drill records before they reach the controls", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("tempo-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction("drills", "readwrite");
+      transaction.objectStore("drills").put({ id: "legacy-invalid", name: "Unsafe legacy route", mode: "delay", bpm: 120, bars: 16, meter: 4, amount: 999, seed: 1 });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 3, name: "Unsafe legacy route" })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("tempo-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const result = await new Promise<unknown>((resolve, reject) => {
+      const request = db.transaction("drills", "readonly").objectStore("drills").get("legacy-invalid");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return result;
+  })).toBeUndefined();
 });
 
 test("updates a controlled prior PWA client to the current app shell", async ({ page, context }, testInfo) => {
@@ -78,23 +119,33 @@ test("updates a controlled prior PWA client to the current app shell", async ({ 
   const currentApp = readFileSync("dist/assets/app.js", "utf8");
   expect(currentVersion).toMatch(/^tempo-lab-[a-f0-9]{16}$/);
   expect(worker).not.toContain("__TEMPO_LAB_CACHE_VERSION__");
+  const priorApp = `${currentApp};globalThis.__tempoLabPriorShell=true;`;
 
   const priorWorker = `
     const VERSION = "tempo-lab-regression-prior";
-    const SHELL = ["/", "/index.html", "/assets/app.js", "/assets/app.css"];
-    self.addEventListener("install", (event) => event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())));
+    const PRIOR_APP = ${JSON.stringify(priorApp)};
+    self.addEventListener("install", (event) => event.waitUntil(caches.open(VERSION).then(async (cache) => {
+      await cache.addAll(["/", "/index.html", "/assets/app.css"]);
+      await cache.put("/assets/app.js", new Response(PRIOR_APP, { headers: { "Content-Type": "application/javascript" } }));
+    }).then(() => self.skipWaiting())));
     self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
     self.addEventListener("fetch", (event) => {
       if (event.request.method !== "GET") return;
       event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
     });`;
-  await context.route("**/sw.js", (route) => route.fulfill({ contentType: "application/javascript", body: priorWorker }));
+  const priorWorkerHandler = (route: Route) => route.fulfill({ contentType: "application/javascript", body: priorWorker });
+  const priorAppHandler = (route: Route) => route.fulfill({ contentType: "application/javascript", headers: { "Cache-Control": "no-store" }, body: priorApp });
+  await context.route("**/sw.js", priorWorkerHandler);
+  await context.route("**/assets/app.js", priorAppHandler);
   await page.goto("/");
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
   await page.reload();
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+  await expect.poll(() => page.evaluate(() => (globalThis as typeof globalThis & { __tempoLabPriorShell?: boolean }).__tempoLabPriorShell)).toBe(true);
+  await expect.poll(() => page.evaluate(async () => (await (await caches.open("tempo-lab-regression-prior")).match("/assets/app.js"))?.text())).toBe(priorApp);
 
-  await context.unroute("**/sw.js");
+  await context.unroute("**/sw.js", priorWorkerHandler);
+  await context.unroute("**/assets/app.js", priorAppHandler);
   await page.evaluate(async () => { await (await navigator.serviceWorker.getRegistration())?.update(); });
   await expect(page.getByText("A Tempo Lab update is ready. Refresh when you finish this drill.")).toBeVisible();
   await expect.poll(async () => page.evaluate(async (version) => {
@@ -103,4 +154,5 @@ test("updates a controlled prior PWA client to the current app shell", async ({ 
   }, currentVersion)).toBe(currentApp);
   await page.reload();
   await expect(page.getByRole("heading", { level: 2, name: "Build your drill" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (globalThis as typeof globalThis & { __tempoLabPriorShell?: boolean }).__tempoLabPriorShell)).toBeUndefined();
 });
