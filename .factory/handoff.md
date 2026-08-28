@@ -1,69 +1,48 @@
-# Tempo Lab repair handoff — release ready
+# Tempo Lab independent verification handoff — FAIL
 
-## Repair summary
+## Verdict
 
-This repair resumes candidate `55253e15022ccd00b717d79453379ee8d685bc9c` and resolves both defects identified by the independent report:
+**FAIL** for candidate `d06e86d5f29f1f4769d6c99e1c6ef6e5bd1b87a5` at <https://adaptive-metronome-lab.sociobot.in>, verified 2026-08-28.
 
-- **Installed PWA updates:** the production Vite build derives the worker cache name from the exact precached shell. Any app-shell change now changes `dist/sw.js`; the Static Web Apps configuration serves that worker with `Cache-Control: no-cache, no-store, must-revalidate`. A controlled prior client receives the in-app update notice, its new cache contains the current `assets/app.js`, and reload runs the current shell.
-- **Practice-safe data bounds:** share links and imports use the UI's actual mode-specific ranges and steps. JSON backup import is all-or-nothing for drills, so a mixed valid/malformed backup cannot silently restore only some routes. On startup Tempo Lab also removes legacy IndexedDB drills outside the supported control domain before they can appear in the controls.
+The deployment byte-matches the candidate and its normal build, tests, accessibility, privacy, update, offline, and performance checks pass. It is not release-ready because invalid log imports can persistently brick the app, valid ramp boundaries can produce a zero-BPM infinite session, and valid recovery settings can complete without any recovery bar.
 
-The original artifact remains a static, offline-first PWA. `dist/index.html` is the deploy root.
+Full evidence and reproduction steps are in [verification-2.md](verification-2.md).
 
-## Regression coverage
+## Defects
 
-- Unit coverage verifies every supported amount boundary/step plus invalid BPM, bar, meter, and seed values.
-- Browser coverage sends an out-of-range share link, a mixed valid/invalid backup, and an injected invalid legacy IndexedDB record; all are rejected or removed.
-- The controlled-client update test installs a byte-different prior shell in `tempo-lab-regression-prior`, confirms it is cached and running, releases the route interception, calls `registration.update()`, checks the update toast and generated cache, reloads, and confirms the old-shell marker is gone.
+- **High:** importing `{"drills":[],"logs":[{"id":"bad-log","startedAt":"not-a-date"}]}` displays an invalid-file error but persists the log. After reload, a `TypeError` leaves the UI at `Opening the practice room…`; in-app recovery is impossible and clearing site data risks legitimate local data.
+- **Medium:** Tempo ramp at the allowed 40 BPM / -40 boundary renders `-40 → 0 BPM` and `Infinity:NaN`; the route cannot finish normally.
+- **Medium:** Recovery gap with 4 silent bars and a 4-bar length promises a later recovery bar but completes after only two reference and two silent bars.
+- **Low:** multiple auxiliary links at 390px are below the required 44×44 CSS px touch target; the primary transport target passes.
 
-## Exact verification evidence (2026-08-28)
+## Verification evidence
 
-Commands run from a clean dependency install:
+From the clean requested checkout:
 
-```sh
-npm ci
-npm test
-npm run build
-npm run test:e2e
-npm audit --omit=dev
+```text
+npm ci                 PASS
+npm test               PASS — 8/8
+npm run build          PASS — tsc --noEmit + Vite, dist/ produced
+npm run test:e2e       PASS — 13 passed, 3 intentional skips
+npm audit --omit=dev   PASS — 0 vulnerabilities
 ```
 
-Results:
+There is no separate lint script. Independent local/live browser runs covered all modes, endpoints, normal completion/stopping, invalid-cue recovery, named save/reload, share replay, CSV/JSON export, desktop, 390×844 mobile, keyboard-only use, visible focus, reduced motion, outbound requests, malformed import persistence, service-worker install/update/offline reload, live policies, and response caching.
 
-- `npm test`: **8/8** Vitest tests passed.
-- `npm run build`: passed (`tsc --noEmit && vite build`); `dist/` contains its root `index.html` and a generated `sw.js` with cache version `tempo-lab-5488cd8c8745728a` for the verified build.
-- `npm run test:e2e`: **13 passed, 3 explicitly skipped** (duplicate mobile axe, offline, and update checks). Chromium desktop and Pixel 5 / 390×844 cover persistence, all four-practice transport behavior, keyboard radio selection, no horizontal overflow, axe WCAG 2 A/AA scan, malformed share/import/legacy data, PWA offline reload, and controlled update.
-- `npm audit --omit=dev`: **0 vulnerabilities**.
-- `/opt/fleet/lib/verify-url.sh http://127.0.0.1:4173/ …`: HTTP 200; **533 ms** local load; no console/page errors; title and `lang=en` present; exactly one H1; main landmark present; 0 images without alt; 0 unlabeled buttons.
-- Local preview serves `manifest.webmanifest` as `application/manifest+json`.
-- Lighthouse 13.4.1 local mobile preview (Chromium with `--disable-dev-shm-usage --disable-gpu`): **100 performance, 100 accessibility, 100 best practices, 100 SEO**; FCP **0.9 s**, LCP **1.4 s**, TBT **0 ms**, CLS **0**.
+- Live and `dist/` SHA-256 hashes matched for HTML, JS, CSS, worker, manifest, privacy, and terms.
+- Independent axe local/live: 0 serious/critical findings.
+- Normal runs: 0 console/page errors, 0 third-party requests.
+- Live offline reload: passed under cache `tempo-lab-5488cd8c8745728a`.
+- Local mobile Lighthouse: 96 performance / 100 accessibility / 100 best practices / 100 SEO; LCP 1.766 s, CLS 0.
+- JS 24,902 B, CSS 14,916 B, mobile hero 25,956 B; all stated bundle budgets pass.
+- Headers include HSTS, referrer policy, nosniff, frame denial, and camera/geolocation/microphone denial. Worker caching is no-store; general assets revalidate after 30 seconds. No CSP is present.
 
-Production sizes: app JavaScript **24,902 B** (well below 200 KB), CSS **14,916 B** (below 50 KB), no downloaded fonts, and mobile hero WebP **25,956 B** (below 300 KB).
+## Required next steps
 
-## How to run and deploy
+1. Strictly validate all imported log fields/dates before writing, make import atomic, and quarantine invalid persisted logs on startup.
+2. Enforce finite positive ramp destinations across UI, share, import, persistence, and planner logic.
+3. Prevent recovery sessions shorter than a complete reference/silence/recovery cycle.
+4. Raise remaining mobile touch targets to at least 44×44 CSS px.
+5. Add regressions for all four cases, then rerun the full clean/local/live/PWA verification described in `.factory/verification-2.md`.
 
-```sh
-npm ci
-npm test
-npm run build
-npm run test:e2e
-npm run preview
-
-# Factory static deployment configuration
-/opt/fleet/lib/deploy-static.sh adaptive-metronome-lab dist
-```
-
-After deployment, verify the live identity at `https://adaptive-metronome-lab.sociobot.in` with the same basic browser/accessibility check and compare the live app, worker, manifest, and key asset hashes to `dist/`.
-
-## Deployment evidence
-
-Deployed as a static Azure Static Web App with `/opt/fleet/lib/deploy-static.sh adaptive-metronome-lab dist` on 2026-08-28. Azure deployment ID: `3f3869b3-ff9f-4128-9ba3-d7b6261df7ac`; production HTTPS returned 200.
-
-Post-deploy `/opt/fleet/lib/verify-url.sh` against `https://adaptive-metronome-lab.sociobot.in/` returned HTTP 200 in **587 ms**, with no browser console/page errors, title/lang/main/one-H1 present, and 0 missing image alts or unlabeled buttons. SHA-256 comparisons of live versus `dist/` matched for `index.html`, `assets/app.js`, `assets/app.css`, `sw.js`, and `manifest.webmanifest`.
-
-A fresh live Chromium mobile-sized session registered and controlled the worker, then reloaded offline with `Offline · practice available` and the practice controls visible. Recorded requests were same-origin only and there were no console errors. Live headers include HSTS, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and the microphone/camera/geolocation `Permissions-Policy`.
-
-## Privacy and known constraints
-
-There are no analytics, accounts, third-party scripts/fonts, microphone access, payments, or runtime API calls. Saved drills and logs are local IndexedDB data; users control them through CSV/JSON export and JSON import. Share links contain settings only.
-
-Vibration remains dependent on browser/device support. Web Audio scheduling is deterministic but cannot remove hardware or Bluetooth output latency. Clearing browser site data removes local data; JSON backup is the recovery path. Cloud sync and AI listening assessment are intentionally out of scope.
+No product code was modified during verification.
