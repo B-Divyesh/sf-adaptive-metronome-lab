@@ -6,6 +6,8 @@
 
 Implementation candidate deployed: `5d8b685d106c87382ab4d8afccc93a59d5225618` (`fix: add isolated demo and review contracts`).
 
+Verification documentation commit: `4bcbeaea59d0cb653d87ee2ebd52e66bc2f5c7ae` (`docs: record repair verification`). This SHA marker is a report-only update and does not change the deployed implementation.
+
 Tempo Lab is an offline metronome for musicians who want repeatable tempo-change drills without changing notation or audio. The first action is **Try it with sample data**, which opens four realistic drills and a three-attempt practice log.
 
 ## What changed
