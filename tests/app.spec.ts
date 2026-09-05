@@ -26,7 +26,7 @@ async function readLocalData(page: import("@playwright/test").Page): Promise<{ d
 
 test("builds, saves, and reloads a named drill", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: "Tempo Lab" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Practice tempo changes without editing music" })).toBeVisible();
   await page.locator("#bpm").fill("104");
   await page.getByLabel("Drill name").fill("Odd-meter bridge");
   await page.getByRole("button", { name: "Save drill" }).click();
@@ -78,7 +78,7 @@ test("reloads the complete practice room offline", async ({ page, context }, tes
 test("rejects out-of-range shared and imported drill settings", async ({ page }) => {
   const unsafe = { n: "Unsafe", m: "drift", b: 120, l: 16, t: 4, a: 999, s: 1 };
   await page.goto(`/?route=${sharedRoute(unsafe)}`);
-  await expect(page.getByText("That share link is incomplete or invalid. A fresh drill was opened instead.")).toBeVisible();
+  await expect(page.getByText("That share link is incomplete or invalid. A new drill was opened instead.")).toBeVisible();
   await expect(page.locator("#amount-output")).toHaveText("±6 BPM");
 
   await page.locator("#import-json").setInputFiles({
@@ -163,7 +163,7 @@ test("constrains ramp controls and shared routes to finite supported destination
 
   const unsafe = { n: "Zero destination", m: "ramp", b: 40, l: 16, t: 4, a: -40, s: 1 };
   await page.goto(`/?route=${sharedRoute(unsafe)}`);
-  await expect(page.getByText("That share link is incomplete or invalid. A fresh drill was opened instead.")).toBeVisible();
+  await expect(page.getByText("That share link is incomplete or invalid. A new drill was opened instead.")).toBeVisible();
 });
 
 test("expands a recovery route to include the advertised recovery bar", async ({ page }) => {
@@ -185,7 +185,7 @@ test("expands a recovery route to include the advertised recovery bar", async ({
     new MutationObserver(() => seen.push(phase.textContent ?? "")).observe(phase, { childList: true, subtree: true, characterData: true });
   });
   await page.getByRole("button", { name: /Start drill/ }).click();
-  await expect(page.getByText("Route complete. Practice logged.")).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText("Drill complete. Practice attempt logged.")).toBeVisible({ timeout: 8_000 });
   expect(await page.evaluate(() => (globalThis as typeof globalThis & { __tempoLabPhases?: string[] }).__tempoLabPhases)).toContain("Recovery bar");
 });
 
@@ -194,7 +194,7 @@ test("keeps auxiliary mobile links at least 44 by 44 CSS pixels", async ({ page 
   await page.goto("/");
   for (const target of [
     page.locator(".wordmark"), page.getByRole("link", { name: "Log", exact: true }),
-    page.getByRole("link", { name: "Build the first route" }), page.getByRole("link", { name: "Privacy" }),
+    page.getByRole("link", { name: "Build the first drill" }), page.getByRole("link", { name: "Privacy" }),
     page.getByRole("link", { name: "Terms" })
   ]) {
     const box = await target.boundingBox();

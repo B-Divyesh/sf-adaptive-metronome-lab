@@ -4,11 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#10243a" />
-    <meta name="description" content="Build repeatable tempo-variation drills with a precise, offline metronome." />
+    <meta name="description" content="Practice repeatable tempo changes without editing music." />
+    <link rel="canonical" href="https://adaptive-metronome-lab.sociobot.in/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Tempo Lab" />
+    <meta property="og:title" content="Tempo Lab — practice tempo changes" />
+    <meta property="og:description" content="Practice repeatable tempo changes without editing music." />
+    <meta property="og:image" content="https://adaptive-metronome-lab.sociobot.in/assets/tempo-lab-social.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Tempo Lab — practice tempo changes" />
+    <meta name="twitter:description" content="Practice repeatable tempo changes without editing music." />
+    <meta name="twitter:image" content="https://adaptive-metronome-lab.sociobot.in/assets/tempo-lab-social.jpg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="preload" as="image" href="/assets/tempo-line-hero-640.webp" type="image/webp" media="(max-width: 700px)" fetchpriority="high" />
-    <title>Tempo Lab — adaptive metronome drills</title>
+    <title>Tempo Lab — practice tempo changes</title>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to practice controls</a>
@@ -16,22 +27,28 @@
       <header class="site-header">
         <a class="wordmark" href="/" aria-label="Tempo Lab home"><span aria-hidden="true">TL</span> Tempo Lab</a>
         <nav aria-label="Main navigation">
-          <a href="#practice">Practice</a><a href="#saved">Saved</a><a href="#log">Log</a>
+          <a href="/demo">Demo</a><a href="#practice">Practice</a><a href="#log">Log</a><a href="/privacy/">Privacy</a>
         </nav>
         <span class="network-status" id="network-status">Checking connection…</span>
       </header>
+      <aside id="demo-banner" class="demo-banner" aria-label="Demo controls" hidden>
+        <p><strong>Demo — sample data, nothing is saved</strong><span> Four sample drills and a practice log are shown separately from your saved data.</span></p>
+        <div><button id="reset-demo" class="quiet">Reset demo</button><button id="start-real" class="secondary">Start for real</button></div>
+      </aside>
       <main id="main">
         <section class="hero" aria-labelledby="page-title">
           <picture>
             <source media="(max-width: 700px)" srcset="/assets/tempo-line-hero-640.webp" />
             <img src="/assets/tempo-line-hero-1200.webp" width="1200" height="800" fetchpriority="high" alt="Art-deco metronome pendulum crossing a four-stop transit line" />
           </picture>
-          <div class="hero-copy"><p class="eyebrow">Precision practice line · runs offline</p><h1 id="page-title">Tempo<br />Lab</h1><p>Build controlled variation. Replay the exact route. Keep the score untouched.</p><a class="hero-cta" href="#practice">Build a drill <span aria-hidden="true">↓</span></a></div>
+          <div class="hero-copy"><p class="eyebrow">Tempo Lab</p><h1 id="page-title">Practice tempo changes without editing music</h1><p>For musicians who need repeatable drift, ramp, delayed-beat, and recovery drills.</p><div class="hero-actions"><a class="hero-cta" href="/demo">Try it with sample data <span aria-hidden="true">→</span></a><span>Loads four example drills and a practice log.</span></div><ul class="hero-facts"><li>Works offline after the first visit.</li><li>Drills and logs stay in this browser.</li><li>Free to use.</li></ul></div>
         </section>
         <div id="workspace" aria-live="polite"><p class="loading-state">Opening the practice room…</p></div>
+        <section class="how-it-works" aria-labelledby="how-title"><p class="eyebrow">How it works</p><h2 id="how-title">Practice a tempo-change drill</h2><ol><li><strong>Choose a tempo change.</strong><span>Set a starting BPM, length, meter, and variation.</span></li><li><strong>Practice the generated clicks.</strong><span>Use sound, visual, or vibration cues.</span></li><li><strong>Save or export the result.</strong><span>Keep named drills and practice attempts in this browser.</span></li></ol></section>
       </main>
-      <footer><p>Tempo Lab is a private, local-first practice tool. <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p><p>Original AI-generated poster artwork; interface geometry drawn in code.</p></footer>
+      <footer><p>Tempo-change drills for musicians. <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p><p><a href="https://sociobot.in" aria-label="Param Factory, opens external site">Built by Param Factory ↗</a> · Build repair-4</p><p>Original AI-generated poster artwork; interface geometry drawn in code.</p></footer>
     </div>
+    <p id="route-announcement" class="sr-only" aria-live="polite"></p>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

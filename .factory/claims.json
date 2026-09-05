@@ -1,0 +1,142 @@
+[
+  {
+    "id": "demo-isolation",
+    "claim": "Try it with sample data loads four example drills and a practice log without changing saved data.",
+    "where": "Landing action and demo banner",
+    "test": "npm run test:e2e -- --grep @claim:demo-isolation",
+    "sandbox": "Fresh browser at /demo; seed a real drill separately, edit/reset demo data, then start for real and compare both IndexedDB namespaces."
+  },
+  {
+    "id": "free-to-use",
+    "claim": "Tempo Lab is free to use.",
+    "where": "Landing fact",
+    "test": "npm run test:e2e -- --grep @claim:free-to-use",
+    "sandbox": "Fresh browser at /demo; open the supplied drills and confirm no account or payment control is required."
+  },
+  {
+    "id": "offline-reload",
+    "claim": "Works offline after the first visit.",
+    "where": "Landing fact and README",
+    "test": "npm run test:e2e -- --grep @claim:offline-reload",
+    "sandbox": "Dedicated fresh browser context at /demo; wait for service-worker control, set offline, reload, and inspect the sample drill."
+  },
+  {
+    "id": "drift-replay",
+    "claim": "A drift drill repeats its two-bar tempo pattern inside the selected BPM limit.",
+    "where": "Drift description and README",
+    "test": "npm run test:e2e -- --grep @claim:drift-replay",
+    "sandbox": "Fresh browser at /demo; open the planned-tempo output, reload, and compare sample values and limits."
+  },
+  {
+    "id": "tempo-ramp",
+    "claim": "A tempo ramp moves evenly between supported BPM endpoints.",
+    "where": "Ramp description and README",
+    "test": "npm run test:e2e -- --grep @claim:tempo-ramp",
+    "sandbox": "Fresh browser at /demo; load the sample ramp and inspect its planned-tempo output."
+  },
+  {
+    "id": "delayed-beat",
+    "claim": "A delayed-beat drill delays its selected cue while later beats remain on the tempo grid.",
+    "where": "Delayed-beat description and README",
+    "test": "npm run test:e2e -- --grep @claim:delayed-beat",
+    "sandbox": "Fresh browser at /demo; run the sample delay drill at a short, fast setting and record its visible cue phases."
+  },
+  {
+    "id": "recovery-gap",
+    "claim": "A recovery drill gives reference bars, the selected silent bars, and a recovery bar.",
+    "where": "Recovery description and README",
+    "test": "npm run test:e2e -- --grep @claim:recovery-gap",
+    "sandbox": "Fresh browser at /demo; run the sample recovery drill and observe all visible phases."
+  },
+  {
+    "id": "cue-options",
+    "claim": "Tempo Lab provides sound, visual, and supported-device vibration cues.",
+    "where": "Cue controls and README",
+    "test": "npm run test:e2e -- --grep @claim:cue-options",
+    "sandbox": "Fresh browser at /demo; observe audio and visual cues, mock supported vibration, and inspect the unsupported-device label."
+  },
+  {
+    "id": "save-drill",
+    "claim": "Saving a named drill keeps it in this browser after reload.",
+    "where": "Saved drills and README",
+    "test": "npm run test:e2e -- --grep @claim:save-drill",
+    "sandbox": "Fresh browser at /demo; save a named sample drill and reload."
+  },
+  {
+    "id": "share-link",
+    "claim": "A share link contains drill settings and no practice log.",
+    "where": "Copy share link control and privacy policy",
+    "test": "npm run test:e2e -- --grep @claim:share-link",
+    "sandbox": "Fresh browser at /demo; copy a link, inspect its query fields, and open it in a new browser context."
+  },
+  {
+    "id": "practice-log",
+    "claim": "Stopped and completed drills are added to the practice log.",
+    "where": "Practice log and README",
+    "test": "npm run test:e2e -- --grep @claim:practice-log",
+    "sandbox": "Fresh browser at /demo; start and stop the supplied drill, then inspect the visible log and demo database."
+  },
+  {
+    "id": "csv-export",
+    "claim": "Exports the practice log as CSV.",
+    "where": "Export CSV control and README",
+    "test": "npm run test:e2e -- --grep @claim:csv-export",
+    "sandbox": "Fresh browser at /demo; download the supplied log and verify its header and one row per sample attempt."
+  },
+  {
+    "id": "json-backup-import",
+    "claim": "Backs up and imports drills and practice attempts as JSON.",
+    "where": "Back up JSON and Import JSON controls and README",
+    "test": "npm run test:e2e -- --grep @claim:json-backup-import",
+    "sandbox": "Fresh browser at /demo; download the supplied backup, parse it, and import it through the product control."
+  },
+  {
+    "id": "private-browser-storage",
+    "claim": "Drills and logs stay in this browser.",
+    "where": "Landing facts, privacy policy, and README",
+    "test": "npm run test:e2e -- --grep @claim:private-browser-storage",
+    "sandbox": "Fresh browser at /demo; save a drill and inspect both IndexedDB namespaces."
+  },
+  {
+    "id": "clear-browser-data",
+    "claim": "Clearing browser site data removes saved drills and practice attempts.",
+    "where": "Privacy policy and README",
+    "test": "npm run test:e2e -- --grep @claim:clear-browser-data",
+    "sandbox": "Fresh browser starts at /demo, saves a real drill, clears IndexedDB with the browser’s site-data control, and reloads the real workspace."
+  },
+  {
+    "id": "same-origin-runtime",
+    "claim": "Tempo Lab has no third-party runtime request during normal demo use.",
+    "where": "Privacy policy and README",
+    "test": "npm run test:e2e -- --grep @claim:same-origin-runtime",
+    "sandbox": "Fresh browser at /demo; capture every request while starting and stopping the supplied drill, then allow only the product origin."
+  },
+  {
+    "id": "no-recording-or-grading",
+    "claim": "Tempo Lab gives timing cues without recording or grading a musician.",
+    "where": "What Tempo Lab does not do and README",
+    "test": "npm run test:e2e -- --grep @claim:no-recording-or-grading",
+    "sandbox": "Fresh browser at /demo with a recording microphone stub; start and stop a drill and assert no microphone call occurs."
+  },
+  {
+    "id": "keyboard-space",
+    "claim": "Press Space to start or stop outside a form field.",
+    "where": "Practice controls",
+    "test": "npm run test:e2e -- --grep @claim:keyboard-space",
+    "sandbox": "Fresh browser at /demo; use Space on the document and then inside the drill-name field."
+  },
+  {
+    "id": "installable-manifest",
+    "claim": "Tempo Lab has a standalone app manifest.",
+    "where": "README",
+    "test": "npm run test:e2e -- --grep @claim:installable-manifest",
+    "sandbox": "Fresh browser at /demo; load the linked manifest and confirm its standalone display, icons, and controlled service worker."
+  },
+  {
+    "id": "build-output",
+    "claim": "The production build writes a deployable app to dist with index.html at its root.",
+    "where": "README developer setup",
+    "test": "npm run test:e2e -- --grep @claim:build-output",
+    "sandbox": "The Playwright production server builds the app, opens /demo, and checks the generated dist/index.html artifact."
+  }
+]

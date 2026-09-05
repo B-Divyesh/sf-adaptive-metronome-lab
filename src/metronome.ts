@@ -53,7 +53,7 @@ export class Metronome {
       this.visualTimers.push(window.setTimeout(() => {
         if (!this.running) return;
         this.onBeat(beatIndex, plan);
-        if (drill.haptic && plan.audible && "vibrate" in navigator) navigator.vibrate(plan.accent ? 28 : 16);
+        if (drill.haptic && plan.audible && typeof navigator.vibrate === "function") navigator.vibrate(plan.accent ? 28 : 16);
       }, delay));
       this.nextBeatTime += 60 / plan.bpm;
       this.index += 1;

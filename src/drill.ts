@@ -79,7 +79,7 @@ export function describeDrill(drill: Drill): string {
     delay: `delays the last beat of every second bar by ${drill.amount} ms`,
     recovery: `gives two reference bars, ${drill.amount} silent bar${drill.amount === 1 ? "" : "s"}, then a recovery bar`
   }[drill.mode];
-  return `${drill.bars} bars in ${drill.meter}/4; ${details}. Seed ${drill.seed}.`;
+  return `${drill.bars} bars in ${drill.meter}/4; ${details}. The pattern repeats when the drill is replayed.`;
 }
 
 export function estimateSeconds(drill: Drill): number {

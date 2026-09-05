@@ -1,11 +1,14 @@
 import "./style.css";
 import { amountDefault, createDrill, modeLabels, type Drill, type DrillMode, type PracticeLog } from "./types";
-import { describeDrill, estimateSeconds, minimumBarsForRecovery, rampAmountBounds, routePoints, supportedBarCounts, validateDrill, validatePracticeLog } from "./drill";
+import { describeDrill, estimateSeconds, getBeatPlan, minimumBarsForRecovery, rampAmountBounds, routePoints, supportedBarCounts, validateDrill, validatePracticeLog } from "./drill";
 import { Metronome } from "./metronome";
-import { database } from "./storage";
+import { createDatabase } from "./storage";
+import { demoDrills, demoLogs } from "./demo";
 
 const workspace = document.querySelector<HTMLElement>("#workspace")!;
 const toast = document.querySelector<HTMLElement>("#toast")!;
+const isDemo = location.pathname === "/demo" || new URLSearchParams(location.search).get("demo") === "1";
+const database = createDatabase(isDemo ? "demo" : "real");
 let current = createDrill();
 let saved: Drill[] = [];
 let logs: PracticeLog[] = [];
@@ -14,10 +17,10 @@ let startedAt = 0;
 let lastBeat = 0;
 
 const modeInfo: Record<DrillMode, { short: string; description: string; min: number; max: number; step: number; unit: string }> = {
-  drift: { short: "Wander inside a limit", description: "A seeded tempo route changes every two bars and always stays inside your chosen bound.", min: 1, max: 20, step: 1, unit: "± BPM" },
-  ramp: { short: "Move to a destination", description: "The click moves evenly from the starting tempo to a faster or slower destination.", min: -40, max: 60, step: 1, unit: "BPM change" },
-  delay: { short: "Meet a late arrival", description: "The final click of every second bar arrives late while the underlying grid stays steady.", min: 20, max: 180, step: 10, unit: "ms late" },
-  recovery: { short: "Hold pulse through silence", description: "Two reference bars give way to silent bars, followed by an accented recovery bar.", min: 1, max: 4, step: 1, unit: "silent bars" }
+  drift: { short: "Change tempo every two bars", description: "Tempo changes every two bars within your chosen BPM limit.", min: 1, max: 20, step: 1, unit: "± BPM" },
+  ramp: { short: "Move evenly to a tempo", description: "Tempo moves evenly from the starting BPM to the selected destination.", min: -40, max: 60, step: 1, unit: "BPM change" },
+  delay: { short: "Delay the last beat", description: "The final cue of every second bar is late. The beat timing stays steady.", min: 20, max: 180, step: 10, unit: "ms late" },
+  recovery: { short: "Count through silent bars", description: "Two reference bars lead to silent bars and one accented recovery bar.", min: 1, max: 4, step: 1, unit: "silent bars" }
 };
 
 function amountBounds(drill: Drill): { min: number; max: number } {
@@ -52,7 +55,7 @@ function routeSvg(drill: Drill): string {
     const [x, y] = points.split(" ")[index].split(",");
     return `<circle cx="${x}" cy="${y}" r="6" />`;
   }).join("");
-  return `<svg viewBox="-8 0 576 108" role="img" aria-labelledby="route-title route-desc"><title id="route-title">Tempo route preview</title><desc id="route-desc">${escapeHtml(describeDrill(drill))}</desc><line x1="0" y1="92" x2="560" y2="92" /><polyline points="${points}" />${stations}</svg>`;
+  return `<svg viewBox="-8 0 576 108" role="img" aria-labelledby="tempo-title tempo-desc"><title id="tempo-title">Tempo preview</title><desc id="tempo-desc">${escapeHtml(describeDrill(drill))}</desc><line x1="0" y1="92" x2="560" y2="92" /><polyline points="${points}" />${stations}</svg>`;
 }
 
 function duration(seconds: number): string {
@@ -72,13 +75,19 @@ function amountText(drill: Drill): string {
   return `${drill.amount} silent bar${drill.amount === 1 ? "" : "s"}`;
 }
 
+function renderTempoList(drill: Drill): string {
+  const tempos = Array.from({ length: drill.bars }, (_, bar) => Math.round(getBeatPlan(drill, bar * drill.meter).bpm));
+  const finalTempo = Math.round(getBeatPlan(drill, drill.bars * drill.meter - 1).bpm);
+  return `<details class="tempo-list"><summary>Show planned tempos</summary><ol>${tempos.map((tempo, index) => `<li>Bar ${index + 1}: ${tempo} BPM</li>`).join("")}<li>Final cue: ${finalTempo} BPM</li></ol></details>`;
+}
+
 function render(): void {
   const info = modeInfo[current.mode];
   const bounds = amountBounds(current);
   workspace.innerHTML = `
     <section class="practice-grid" id="practice" aria-labelledby="practice-title">
       <div class="editor">
-        <div class="section-heading"><div><p class="eyebrow">Route planner</p><h2 id="practice-title">Build your drill</h2></div><div class="planner-actions"><p id="share-note" class="share-note" hidden>Shared route loaded. Save it to keep it.</p><button id="new-drill" class="quiet">New route</button></div></div>
+        <div class="section-heading"><div><p class="eyebrow">Current drill</p><h2 id="practice-title">Build your drill</h2></div><div class="planner-actions"><p id="share-note" class="share-note" hidden>Shared drill loaded. Save it to keep it.</p><button id="new-drill" class="quiet">Create new drill</button></div></div>
         <fieldset class="mode-picker"><legend>Variation pattern</legend>
           ${Object.entries(modeLabels).map(([mode, label]) => `<label class="mode-option"><input type="radio" name="mode" value="${mode}" ${current.mode === mode ? "checked" : ""} /><span><strong>${label}</strong><small>${modeInfo[mode as DrillMode].short}</small></span></label>`).join("")}
         </fieldset>
@@ -88,16 +97,16 @@ function render(): void {
           <label class="compact-field"><span>Length</span><select id="bars">${supportedBarCounts.map((n) => `<option value="${n}" ${current.bars === n ? "selected" : ""} ${current.mode === "recovery" && n < minimumBarsForRecovery(current.amount) ? "disabled" : ""}>${n} bars</option>`).join("")}</select></label>
           <label class="compact-field"><span>Meter</span><select id="meter">${[2, 3, 4, 5, 6, 7].map((n) => `<option value="${n}" ${current.meter === n ? "selected" : ""}>${n}/4</option>`).join("")}</select></label>
         </div>
-        <div class="route-card"><div class="route-meta"><span>Route preview</span><strong id="route-duration">About ${duration(estimateSeconds(current))}</strong></div><div id="route-graphic">${routeSvg(current)}</div><p id="mode-description">${info.description}</p></div>
+        <div class="route-card"><div class="route-meta"><span>Tempo preview</span><strong id="route-duration">About ${duration(estimateSeconds(current))}</strong></div><div id="route-graphic">${routeSvg(current)}</div><p id="mode-description">${info.description}</p>${renderTempoList(current)}</div>
         <div class="options" aria-label="Cue options">
           <label><input id="audio" type="checkbox" ${current.audio ? "checked" : ""} /><span aria-hidden="true">♪</span> Sound</label>
           <label><input id="visual" type="checkbox" ${current.visual ? "checked" : ""} /><span aria-hidden="true">◉</span> Visual</label>
-          <label><input id="haptic" type="checkbox" ${current.haptic ? "checked" : ""} ${"vibrate" in navigator ? "" : "disabled"} /><span aria-hidden="true">≋</span> Vibration${"vibrate" in navigator ? "" : " unavailable"}</label>
+          <label><input id="haptic" type="checkbox" ${current.haptic ? "checked" : ""} ${typeof navigator.vibrate === "function" ? "" : "disabled"} /><span aria-hidden="true">≋</span> Vibration${typeof navigator.vibrate === "function" ? "" : " unavailable"}</label>
         </div>
-        <div class="save-row"><label for="drill-name">Drill name</label><div><input id="drill-name" maxlength="60" value="${escapeHtml(current.name)}" placeholder="e.g. Bridge at 92" /><button id="save-drill" class="secondary">Save drill</button><button id="share-drill" class="quiet">Share link</button></div><p class="field-hint">The name and settings stay only on this device.</p></div>
+        <div class="save-row"><label for="drill-name">Drill name</label><div><input id="drill-name" maxlength="60" value="${escapeHtml(current.name)}" placeholder="e.g. Bridge at 92" /><button id="save-drill" class="secondary">Save drill</button><button id="share-drill" class="quiet">Copy share link</button></div><p class="field-hint">Saved drills and practice logs are stored in this browser.</p></div>
       </div>
       <aside class="transport" aria-labelledby="transport-title">
-        <p class="eyebrow">Now departing</p><h2 id="transport-title">${modeLabels[current.mode]}</h2>
+        <p class="eyebrow">Practice controls</p><h2 id="transport-title">${modeLabels[current.mode]}</h2>
         <div class="beat-dial" id="beat-dial" data-silent="false"><span class="beat-ring"></span><strong id="live-bpm">${current.bpm}</strong><small>BPM</small></div>
         <p id="beat-count" class="beat-count">Ready · ${current.meter}/4</p><p id="phase" class="phase">${amountText(current)}</p>
         <button id="transport-button" class="primary"><span aria-hidden="true">▶</span> Start drill</button>
@@ -107,20 +116,20 @@ function render(): void {
         <p id="audio-error" class="error" role="alert" hidden></p>
       </aside>
     </section>
-    <section class="collection" id="saved" aria-labelledby="saved-title"><div class="section-heading"><div><p class="eyebrow">Your local lines</p><h2 id="saved-title">Saved drills</h2></div><span>${saved.length} on this device</span></div>${renderSaved()}</section>
-    <section class="log-section" id="log" aria-labelledby="log-title"><div class="section-heading"><div><p class="eyebrow">Station record</p><h2 id="log-title">Practice log</h2></div><div class="export-actions"><button id="export-csv" class="quiet" ${logs.length ? "" : "disabled"}>Export CSV</button><button id="export-json" class="quiet">Back up JSON</button><label class="import-label">Import JSON<input id="import-json" type="file" accept="application/json" /></label></div></div>${renderLogs()}</section>
-    <section class="method" aria-labelledby="method-title"><p class="eyebrow">Operating notes</p><h2 id="method-title">A variation instrument, not a score editor</h2><div><p>Every route is generated from its saved seed, so replaying a bounded-drift drill produces the same tempo changes. Delayed clicks never move the underlying beat grid. Recovery gaps mute the reference, then return on a marked bar.</p><p>Tempo Lab does not listen to or grade your playing. Use the visual and vibration cues with sound, or as alternatives. Start with a comfortable range and stop if a drill is not useful to you.</p></div></section>`;
+    <section class="collection" id="saved" aria-labelledby="saved-title"><div class="section-heading"><div><p class="eyebrow">Saved drills</p><h2 id="saved-title">Saved drills</h2></div><span>${saved.length} in this browser</span></div>${renderSaved()}</section>
+    <section class="log-section" id="log" aria-labelledby="log-title"><div class="section-heading"><div><p class="eyebrow">Practice attempts</p><h2 id="log-title">Practice log</h2></div><div class="export-actions"><button id="export-csv" class="quiet" ${logs.length ? "" : "disabled"}>Export CSV</button><button id="export-json" class="quiet">Back up JSON</button><label class="import-label">Import JSON<input id="import-json" type="file" accept="application/json" /></label></div></div>${renderLogs()}</section>
+    <section class="method" aria-labelledby="method-title"><p class="eyebrow">Limits and privacy</p><h2 id="method-title">What Tempo Lab does not do</h2><div><p>Tempo Lab does not edit notation or audio. It does not listen to or grade your playing.</p><p>Use sound, visual, or supported-device vibration cues. Stop a drill if it is not useful to you.</p></div></section>`;
   bindEvents();
 }
 
 function renderSaved(): string {
-  if (!saved.length) return `<div class="empty-state"><span aria-hidden="true">◇—◇—◇</span><h3>No routes saved yet</h3><p>Name the drill above and save it. Your first repeatable route will appear here.</p><a href="#practice">Build the first route</a></div>`;
-  return `<ul class="drill-list">${saved.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((drill) => `<li><div><span class="mode-tag">${modeLabels[drill.mode]}</span><h3>${escapeHtml(drill.name || "Untitled route")}</h3><p>${drill.bpm} BPM · ${amountText(drill)} · ${drill.bars} bars · seed ${drill.seed}</p></div><div><button class="load-drill secondary" data-id="${drill.id}">Load</button><button class="delete-drill quiet danger" data-id="${drill.id}" aria-label="Delete ${escapeHtml(drill.name || "untitled route")}">Delete</button></div></li>`).join("")}</ul>`;
+  if (!saved.length) return `<div class="empty-state"><span aria-hidden="true">◇—◇—◇</span><h3>No saved drills yet</h3><p>Name the drill above and save it. Your first repeatable drill will appear here.</p><a href="#practice">Build the first drill</a></div>`;
+  return `<ul class="drill-list">${saved.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((drill) => `<li><div><span class="mode-tag">${modeLabels[drill.mode]}</span><h3>${escapeHtml(drill.name || "Untitled drill")}</h3><p>${drill.bpm} BPM · ${amountText(drill)} · ${drill.bars} bars · seed ${drill.seed}</p></div><div><button class="load-drill secondary" data-id="${drill.id}">Load drill</button><button class="delete-drill quiet danger" data-id="${drill.id}" aria-label="Delete ${escapeHtml(drill.name || "untitled drill")}">Delete drill</button></div></li>`).join("")}</ul>`;
 }
 
 function renderLogs(): string {
-  if (!logs.length) return `<div class="empty-state compact"><h3>No departures recorded</h3><p>Completed and stopped drills are logged here with the variation you attempted.</p></div>`;
-  return `<div class="table-wrap"><table><caption class="sr-only">Practice attempts, newest first</caption><thead><tr><th scope="col">Drill</th><th scope="col">When</th><th scope="col">Route</th><th scope="col">Reached</th><th scope="col">Result</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${logs.sort((a, b) => b.startedAt.localeCompare(a.startedAt)).map((log) => `<tr><th scope="row">${escapeHtml(log.drillName)}</th><td>${formatDate(log.startedAt)}</td><td>${modeLabels[log.mode]} · ${log.bpm} BPM</td><td>${log.barsReached}/${log.barsPlanned} bars · ${duration(log.seconds)}</td><td><span class="result ${log.completed ? "complete" : "stopped"}">${log.completed ? "Complete" : "Stopped"}</span></td><td><button class="delete-log icon-button" data-id="${log.id}" aria-label="Delete log for ${escapeHtml(log.drillName)}">×</button></td></tr>`).join("")}</tbody></table></div>`;
+  if (!logs.length) return `<div class="empty-state compact"><h3>No practice attempts yet</h3><p>Completed and stopped drills appear here with the variation you attempted.</p></div>`;
+  return `<div class="table-wrap"><table><caption class="sr-only">Practice attempts, newest first</caption><thead><tr><th scope="col">Drill</th><th scope="col">When</th><th scope="col">Variation</th><th scope="col">Reached</th><th scope="col">Result</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${logs.sort((a, b) => b.startedAt.localeCompare(a.startedAt)).map((log) => `<tr><th scope="row">${escapeHtml(log.drillName)}</th><td>${formatDate(log.startedAt)}</td><td>${modeLabels[log.mode]} · ${log.bpm} BPM</td><td>${log.barsReached}/${log.barsPlanned} bars · ${duration(log.seconds)}</td><td><span class="result ${log.completed ? "complete" : "stopped"}">${log.completed ? "Complete" : "Stopped"}</span></td><td><button class="delete-log icon-button" data-id="${log.id}" aria-label="Delete log for ${escapeHtml(log.drillName)}">×</button></td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function bindEvents(): void {
@@ -161,6 +170,7 @@ function updatePreview(): void {
   document.querySelector("#amount-output")!.textContent = amountText(current);
   document.querySelector("#route-duration")!.textContent = `About ${duration(estimateSeconds(current))}`;
   document.querySelector("#route-graphic")!.innerHTML = routeSvg(current);
+  document.querySelector(".tempo-list")!.outerHTML = renderTempoList(current);
   document.querySelector("#live-bpm")!.textContent = String(current.bpm);
   document.querySelector("#phase")!.textContent = amountText(current);
   document.querySelector("#elapsed")!.textContent = `0:00 / ${duration(estimateSeconds(current))}`;
@@ -218,7 +228,7 @@ async function stopAttempt(completed: boolean): Promise<void> {
   if (button) { button.innerHTML = `<span aria-hidden="true">▶</span> Start drill`; button.classList.remove("stop"); }
   document.querySelector(".transport")?.classList.remove("running");
   const log: PracticeLog = { id: crypto.randomUUID(), drillName: current.name.trim() || modeLabels[current.mode], mode: current.mode, startedAt: new Date(startedAt).toISOString(), seconds: Math.round(seconds), barsPlanned: current.bars, barsReached, bpm: current.bpm, amount: current.amount, completed };
-  try { await database.saveLog(log); logs.push(log); showToast(completed ? "Route complete. Practice logged." : "Stopped route added to the log."); }
+  try { await database.saveLog(log); logs.push(log); showToast(completed ? "Drill complete. Practice attempt logged." : "Stopped drill added to the practice log."); }
   catch { showToast("The attempt ended, but the local log could not be saved.", "error"); }
   render();
 }
@@ -228,7 +238,7 @@ function newDrill(): void {
   current = createDrill();
   render();
   document.querySelector<HTMLInputElement>("#drill-name")?.focus();
-  showToast("Fresh route ready with a new repeatable seed.");
+  showToast("New drill ready with a repeatable tempo pattern.");
 }
 
 async function saveCurrent(): Promise<void> {
@@ -271,17 +281,17 @@ function sharePayload(drill: Drill): string {
 
 async function shareCurrent(): Promise<void> {
   const url = new URL(location.href); url.hash = ""; url.search = `?route=${sharePayload(current)}`;
-  try { await navigator.clipboard.writeText(url.toString()); showToast("Share link copied. It contains settings only."); }
-  catch { prompt("Copy this settings-only link:", url.toString()); }
+  try { await navigator.clipboard.writeText(url.toString()); showToast("Share link copied. It contains drill settings only."); }
+  catch { prompt("Copy this drill-settings link:", url.toString()); }
 }
 
 function loadShared(): boolean {
   const encoded = new URLSearchParams(location.search).get("route"); if (!encoded) return false;
   try {
     const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0))));
-    const candidate = validateDrill({ id: crypto.randomUUID(), name: data.n || "Shared route", mode: data.m, bpm: data.b, bars: data.l, meter: data.t, amount: data.a, seed: data.s, audio: true, visual: true, haptic: false });
-    if (!candidate) throw new Error("Invalid route"); current = candidate; return true;
-  } catch { showToast("That share link is incomplete or invalid. A fresh drill was opened instead.", "error"); return false; }
+    const candidate = validateDrill({ id: crypto.randomUUID(), name: data.n || "Shared drill", mode: data.m, bpm: data.b, bars: data.l, meter: data.t, amount: data.a, seed: data.s, audio: true, visual: true, haptic: false });
+    if (!candidate) throw new Error("Invalid drill"); current = candidate; return true;
+  } catch { showToast("That share link is incomplete or invalid. A new drill was opened instead.", "error"); return false; }
 }
 
 function download(name: string, content: string, type: string): void {
@@ -322,6 +332,72 @@ function updateNetwork(): void {
   element.classList.toggle("offline", !navigator.onLine);
 }
 
+function setDocumentRoute(): void {
+  const title = document.querySelector("title")!;
+  const description = document.querySelector<HTMLMetaElement>('meta[name="description"]')!;
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!;
+  const openGraphTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]')!;
+  const openGraphDescription = document.querySelector<HTMLMetaElement>('meta[property="og:description"]')!;
+  if (isDemo) {
+    title.textContent = "Demo — Tempo Lab";
+    description.content = "Try sample tempo-change drills and a practice log without using your saved data.";
+    canonical.href = "https://adaptive-metronome-lab.sociobot.in/demo";
+  } else {
+    title.textContent = "Tempo Lab — practice tempo changes";
+    description.content = "Practice repeatable tempo changes without editing music.";
+    canonical.href = "https://adaptive-metronome-lab.sociobot.in/";
+  }
+  openGraphTitle.content = title.textContent;
+  openGraphDescription.content = description.content;
+}
+
+function announceSection(): void {
+  const announcement = document.querySelector<HTMLElement>("#route-announcement")!;
+  const hash = location.hash.slice(1);
+  const fallback = document.querySelector<HTMLElement>("#page-title")!;
+  const section = hash ? document.getElementById(hash) : null;
+  const heading = section?.querySelector<HTMLElement>("h2, h1") ?? fallback;
+  window.setTimeout(() => {
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+    if (hash === "log") {
+      document.title = "Practice log — Tempo Lab";
+    } else if (hash === "saved") {
+      document.title = "Saved drills — Tempo Lab";
+    } else if (hash === "practice") {
+      document.title = isDemo ? "Demo — Tempo Lab" : "Tempo Lab — practice tempo changes";
+    } else {
+      setDocumentRoute();
+    }
+    announcement.textContent = `${heading.textContent?.trim() ?? "Tempo Lab"} section`;
+  }, 0);
+}
+
+async function resetDemo(): Promise<void> {
+  try {
+    await database.clearAll();
+    await database.importData(demoDrills, demoLogs);
+    saved = await database.getDrills();
+    logs = await database.getLogs();
+    current = { ...demoDrills[0] };
+    render();
+    showToast("Demo reset with four sample drills and three practice attempts.");
+  } catch {
+    showToast("The sample data could not reset. Reload the demo and try again.", "error");
+  }
+}
+
+function bindDemoControls(): void {
+  const banner = document.querySelector<HTMLElement>("#demo-banner")!;
+  if (!isDemo) return;
+  banner.hidden = false;
+  document.querySelector("#reset-demo")?.addEventListener("click", () => void resetDemo());
+  document.querySelector("#start-real")?.addEventListener("click", async () => {
+    try { await database.clearAll(); }
+    finally { location.assign("/"); }
+  });
+}
+
 function registerServiceWorker(): void {
   if (!("serviceWorker" in navigator)) return;
   navigator.serviceWorker.register("/sw.js").then((registration) => {
@@ -333,6 +409,8 @@ function registerServiceWorker(): void {
 }
 
 window.addEventListener("online", updateNetwork); window.addEventListener("offline", updateNetwork);
+window.addEventListener("hashchange", announceSection);
+window.addEventListener("popstate", announceSection);
 window.addEventListener("keydown", (event) => {
   if (event.code !== "Space" || event.repeat) return;
   const target = event.target as HTMLElement;
@@ -341,10 +419,14 @@ window.addEventListener("keydown", (event) => {
 });
 
 async function init(): Promise<void> {
-  updateNetwork(); registerServiceWorker(); const shared = loadShared();
+  setDocumentRoute(); bindDemoControls(); updateNetwork(); registerServiceWorker(); const shared = loadShared();
   let recoveredRecords = 0;
   try {
-    const [storedDrills, storedLogs] = await Promise.all([database.getDrills(), database.getLogs()]);
+    let [storedDrills, storedLogs] = await Promise.all([database.getDrills(), database.getLogs()]);
+    if (isDemo && !storedDrills.length && !storedLogs.length) {
+      await database.importData(demoDrills, demoLogs);
+      [storedDrills, storedLogs] = await Promise.all([database.getDrills(), database.getLogs()]);
+    }
     const checkedDrills = storedDrills.map((drill) => ({ original: drill, valid: validateDrill(drill) }));
     const invalidIds = checkedDrills.filter(({ valid }) => !valid).map(({ original }) => original.id);
     const checkedLogs = storedLogs.map((log) => ({ original: log, valid: validatePracticeLog(log) }));
@@ -355,11 +437,13 @@ async function init(): Promise<void> {
     saved = checkedDrills.flatMap(({ valid }) => valid ? [valid] : []);
     logs = checkedLogs.flatMap(({ valid }) => valid ? [valid] : []);
     recoveredRecords = invalidIds.length + invalidLogIds.length;
+    if (isDemo && !shared) current = { ...saved.find((drill) => drill.id === "demo-drift") ?? demoDrills[0] };
   }
   catch { showToast("Local storage is unavailable. You can practice, but saves and logs will not persist.", "error"); }
   render();
   if (recoveredRecords) showToast(`Removed ${recoveredRecords} unreadable local record${recoveredRecords === 1 ? "" : "s"} so the practice room could open.`, "error");
   if (shared) { const note = document.querySelector<HTMLElement>("#share-note"); if (note) note.hidden = false; }
+  if (location.hash) announceSection();
 }
 
 void init();

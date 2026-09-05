@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 
 const precacheShell = [
-  "/", "/index.html", "/offline.html", "/privacy/", "/terms/", "/robots.txt", "/sitemap.xml",
-  "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png",
+  "/", "/index.html", "/offline.html", "/404.html", "/privacy/", "/terms/", "/robots.txt", "/sitemap.xml",
+  "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png",
   "/assets/app.js", "/assets/app.css", "/assets/legal.css",
-  "/assets/tempo-line-hero-640.webp", "/assets/tempo-line-hero-1200.webp"
+  "/assets/tempo-line-hero-640.webp", "/assets/tempo-line-hero-1200.webp", "/assets/tempo-lab-social.jpg"
 ];
 
 /**

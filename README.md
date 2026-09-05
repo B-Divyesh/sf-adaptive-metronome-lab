@@ -1,21 +1,27 @@
 # Tempo Lab
 
-Tempo Lab is an offline-first adaptive metronome for musicians who want controlled, repeatable timing variation without editing notation or audio. It turns a practice session into a saved “route”: a deterministic set of clicks that can be replayed, shared, and logged.
+Tempo Lab creates repeatable tempo-change drills for musicians without changing notation or audio. Save a drill, replay the same clicks, and export your practice history.
 
-Live: <https://adaptive-metronome-lab.sociobot.in>
+Try the sample: <https://adaptive-metronome-lab.sociobot.in/demo>
 
 ## What it does
 
-- **Bounded drift:** seeded tempo changes that remain inside a chosen BPM range.
-- **Tempo ramp:** a steady move from the starting BPM to a chosen destination.
-- **Delayed beat:** the last cue of every second bar arrives 20–180 ms late while the underlying grid stays fixed.
-- **Recovery gap:** two reference bars, 1–4 silent bars, then an accented return.
-- Sound, visual, and supported-device vibration cues.
-- Named presets in IndexedDB, reproducible seeds, settings-only share links, and fresh-route creation.
-- A local practice log with CSV export plus full JSON backup/import.
-- Installable PWA behavior with a precached practice room and offline fallback.
+- Changes tempo every two bars within a selected BPM limit.
+- Moves evenly from one tempo to another.
+- Delays the final cue of every second bar.
+- Adds silent bars before an accented recovery bar.
+- Saves named drills and practice attempts in this browser.
+- Copies drill-setting links and exports CSV or JSON backups.
 
-Tempo Lab does not access the microphone, grade playing, or make performance claims. Presets and logs remain on the device unless the user explicitly exports or shares them.
+After one online visit, Tempo Lab works offline. It has sound, visual, and supported-device vibration cues. Tempo Lab does not record or grade your playing.
+
+## Try the sample
+
+Open `/demo` or choose **Try it with sample data** on the home page. The demo loads four example drills and three practice attempts in the `demo:tempo-lab` IndexedDB namespace. It never reads or writes the real `tempo-lab` namespace.
+
+Use **Reset demo** to restore the supplied sample. Use **Start for real** to clear the demo namespace and open the empty real workspace.
+
+See [.factory/demo.md](.factory/demo.md) for the sample contents and reset behavior.
 
 ## Run locally
 
@@ -26,27 +32,26 @@ npm ci
 npm run dev
 ```
 
-Vite prints the local URL. No environment variables or external runtime services are required.
+Vite prints the local address.
 
 ## Test and build
 
 ```sh
-npm test          # deterministic drill unit tests
-npm run test:e2e # Chromium: persistence, keyboard, mobile, axe, offline reload
-npm run build     # exact production build command
+npm test          # drill planner tests
+npm run test:e2e  # browser, accessibility, mobile, PWA, and recovery tests
+npm run test:claims # every public product claim from /demo
+npm run build     # writes dist/index.html and its static assets
 ```
 
-The static production artifact is written to `./dist`, with `dist/index.html` at its root. To inspect it locally:
+The production artifact is `./dist`, with `dist/index.html` at its root. Deploy it to a static host at the domain root. The service worker uses root-relative paths.
 
-```sh
-npm run preview
-```
-
-Deploy the contents of `dist/` to any static host. The service worker assumes the app is served from `/`.
+Every public claim is listed in [.factory/claims.json](.factory/claims.json). Each entry names an exact command and an observable browser outcome. Run the listed commands after `npm ci` from a clean checkout.
 
 ## Data and privacy
 
-IndexedDB stores saved drills and practice logs. Clearing site storage removes them. The JSON backup and import flow lets users move or retain their data. Share links encode only drill name/settings and never include the practice log or a stable device identifier. There are no analytics, third-party scripts, CDN fonts, accounts, payments, or network APIs.
+Saved drills and practice attempts are stored in browser IndexedDB. Clearing site data removes them. A share link contains a drill name and settings, not a practice log or device identifier.
+
+Tempo Lab loads its app resources from this site. It does not request microphone access.
 
 See [the visual thesis](.factory/design.md), [privacy policy](public/privacy/index.html), [terms](public/terms/index.html), and [handoff](.factory/handoff.md).
 
