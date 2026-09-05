@@ -8,6 +8,8 @@ Implementation reviewed: `5d8b685d106c87382ab4d8afccc93a59d5225618`.
 
 Documentation baseline reviewed: `9e3863b10eebda8f2224f7fa1015b4b975712710`. The commits after the implementation candidate contain reports only and do not require another product deployment.
 
+Verification report commit: `4bd38e88aa0bb6413c15eb8b07706bb9c26117aa`.
+
 Full evidence and required repairs are in `.factory/verification-4.md`.
 
 ## Product summary
